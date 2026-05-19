@@ -3,9 +3,14 @@
   "version": "1.0.0",
   "description": "Content Org Sprint Health Dashboard",
   "scripts": {
-    "sync": "node scripts/sync.js"
+    "sync": "node scripts/sync.js",
+    "test": "playwright test",
+    "test:ci": "playwright test --reporter=github"
   },
   "engines": {
     "node": ">=18"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.60.0"
   }
 }
