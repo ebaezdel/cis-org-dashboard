@@ -67,7 +67,7 @@ async function fetchActiveIssues(board) {
   let startAt = 0;
 
   while (true) {
-    const data = await jiraGet(`/search?jql=${jql}&fields=${fields}&maxResults=100&startAt=${startAt}`);
+    const data = await jiraGet(`/search/jql?jql=${jql}&fields=${fields}&maxResults=100&startAt=${startAt}`);
     issues = issues.concat(data.issues || []);
     if (issues.length >= data.total) break;
     startAt += 100;
