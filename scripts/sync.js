@@ -66,7 +66,7 @@ function jiraGet(urlPath) {
 async function fetchIssues(board, sprintClause) {
   const fields = [
     'summary', 'status', 'assignee', 'issuetype', 'labels',
-    'customfield_10034', 'customfield_10016', 'parent',
+    'customfield_10034', 'customfield_10016', 'customfield_10020', 'parent',
   ].join(',');
   const jql = encodeURIComponent(`project = ${board} AND sprint in ${sprintClause} ORDER BY created ASC`);
 
@@ -217,6 +217,47 @@ const METRICS_RE = /, issues:\d+(?:\.\d+)?, totalSP:\d+(?:\.\d+)?, doneSP:\d+(?:
 // Uses a non-greedy match inside brackets; works because each row is a single line.
 const PAYLOAD_RE = /, epicBreakdown:\[.*\], effortBreakdown:\{[^}]*\}(?:, _hasStatusBreakdown:true)?, ticketsPerDev:\[.*\](?=\})/;
 
+// Extract sprint name from customfield_10020 (array of sprint objects)
+function getSprintName(issue) {
+  const sprints = issue.fields?.customfield_10020;
+  if (!Array.isArray(sprints) || !sprints.length) return null;
+  // Prefer closed, then active, then future
+  const order = { closed: 0, active: 1, future: 2 };
+  const sorted = [...sprints].sort((a, b) => (order[a.state] ?? 9) - (order[b.state] ?? 9));
+  return sorted[0]?.name || null;
+}
+
+// Group issues by sprint name
+function groupBySprint(issues) {
+  const map = {};
+  issues.forEach(issue => {
+    const name = getSprintName(issue);
+    if (!name) return;
+    if (!map[name]) map[name] = [];
+    map[name].push(issue);
+  });
+  return map;
+}
+
+function patchHTMLBySprintName(html, sprintName, m, epicBreakdown, effortBreakdown, ticketsPerDev) {
+  const metricsRepl = `, issues:${m.issues}, totalSP:${m.totalSP}, doneSP:${m.doneSP}, pendingSP:${m.pendingSP}, inProgressSP:${m.inProgressSP}, committedSP:${m.committedSP}, spRes:${m.spRes}, velocity:${m.velocity}`;
+  const payloadRepl = `, epicBreakdown:${serializeEpicBreakdown(epicBreakdown)}, effortBreakdown:${serializeObj(effortBreakdown)}, _hasStatusBreakdown:true, ticketsPerDev:${serializeTicketsPerDev(ticketsPerDev)}`;
+
+  const lines = html.split('\n');
+  let found = false;
+
+  const result = lines.map(line => {
+    if (!line.includes(`sprintName:'${sprintName}'`)) return line;
+    let updated = line.replace(METRICS_RE, metricsRepl);
+    updated = updated.replace(PAYLOAD_RE, payloadRepl);
+    if (updated !== line) found = true;
+    return updated;
+  });
+
+  if (!found) process.stderr.write(`[WARN] No row found for sprintName:'${sprintName}'\n`);
+  return result.join('\n');
+}
+
 function patchHTML(html, board, sprintStatus, m, epicBreakdown, effortBreakdown, ticketsPerDev) {
   const metricsRepl  = `, issues:${m.issues}, totalSP:${m.totalSP}, doneSP:${m.doneSP}, pendingSP:${m.pendingSP}, inProgressSP:${m.inProgressSP}, committedSP:${m.committedSP}, spRes:${m.spRes}, velocity:${m.velocity}`;
   const payloadRepl  = `, epicBreakdown:${serializeEpicBreakdown(epicBreakdown)}, effortBreakdown:${serializeObj(effortBreakdown)}, _hasStatusBreakdown:true, ticketsPerDev:${serializeTicketsPerDev(ticketsPerDev)}`;
@@ -267,15 +308,45 @@ async function main() {
     process.stdout.write(`  [${board.padEnd(6)}] future... `);
     try {
       const issues          = await fetchIssues(board, 'futureSprints()');
-      if (!issues.length) { console.log('  (no future sprint)'); continue; }
-      const metrics         = calcMetrics(issues);
-      const epicBreakdown   = buildEpicBreakdown(issues);
-      const effortBreakdown = buildEffortBreakdown(issues);
-      const ticketsPerDev   = buildTicketsPerDev(issues);
-      html = patchHTML(html, board, 'future', metrics, epicBreakdown, effortBreakdown, ticketsPerDev);
-      console.log(`${String(issues.length).padStart(3)} issues — totalSP:${metrics.totalSP}  (future)`);
+      if (!issues.length) { console.log('(no future sprint)'); }
+      else {
+        const metrics         = calcMetrics(issues);
+        const epicBreakdown   = buildEpicBreakdown(issues);
+        const effortBreakdown = buildEffortBreakdown(issues);
+        const ticketsPerDev   = buildTicketsPerDev(issues);
+        html = patchHTML(html, board, 'future', metrics, epicBreakdown, effortBreakdown, ticketsPerDev);
+        console.log(`${String(issues.length).padStart(3)} issues — totalSP:${metrics.totalSP}  (future)`);
+      }
     } catch (err) {
       console.log(`FAILED — ${err.message}`);
+    }
+
+    // Closed sprints — only patch rows that exist in index.html and lack epicBreakdown data
+    const closedRows = [...html.matchAll(new RegExp(`sprintName:'(${board}\\.[^']+)'[^}]+sprintStatus:'closed'[^}]+epicBreakdown:\\[\\]`, 'g'))]
+      .map(m => m[1]);
+    if (closedRows.length) {
+      process.stdout.write(`  [${board.padEnd(6)}] closed (${closedRows.length} missing)... `);
+      try {
+        const issues = await fetchIssues(board, 'closedSprints()');
+        if (!issues.length) { console.log('(no data)'); }
+        else {
+          const byName = groupBySprint(issues);
+          let count = 0;
+          for (const name of closedRows) {
+            if (!byName[name]) continue;
+            const sprintIssues    = byName[name];
+            const metrics         = calcMetrics(sprintIssues);
+            const epicBreakdown   = buildEpicBreakdown(sprintIssues);
+            const effortBreakdown = buildEffortBreakdown(sprintIssues);
+            const ticketsPerDev   = buildTicketsPerDev(sprintIssues);
+            html = patchHTMLBySprintName(html, name, metrics, epicBreakdown, effortBreakdown, ticketsPerDev);
+            count++;
+          }
+          console.log(`${count} rows updated`);
+        }
+      } catch (err) {
+        console.log(`FAILED — ${err.message}`);
+      }
     }
   }
 
