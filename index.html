@@ -2218,11 +2218,12 @@ function renderVelocityChart(canvasId) {
   var ctx  = document.getElementById(canvasId);
   if (!ctx) return;
 
-  var boardVal = (document.getElementById('f-board') || {}).value || '';
+  var boardVal  = (document.getElementById('f-board')  || {}).value || '';
+  var sprintVal = (document.getElementById('f-sprint') || {}).value || '';
   var source = FILTERED.length ? FILTERED : ACTIVE_SPRINTS;
 
-  // Show prompt when no board is selected
-  if (!boardVal) {
+  // Require both board AND specific sprint
+  if (!boardVal || !sprintVal) {
     if (ctx) ctx.style.display = 'none';
     var existing = wrap ? wrap.querySelector('.epic-empty') : null;
     if (!existing && wrap) {
@@ -2434,10 +2435,11 @@ function renderCapacityChart() {
   var el = document.getElementById('capacity-cards');
   if (!el) return;
 
-  var boardVal = (document.getElementById('f-board') || {}).value || '';
+  var boardVal  = (document.getElementById('f-board')  || {}).value || '';
+  var sprintVal = (document.getElementById('f-sprint') || {}).value || '';
 
-  // Empty state: at minimum a board must be selected
-  if (!boardVal) {
+  // Require both board AND specific sprint
+  if (!boardVal || !sprintVal) {
     el.innerHTML =
       '<div class="cap-empty">' +
         '<div class="cap-empty-icon">&#128100;</div>' +

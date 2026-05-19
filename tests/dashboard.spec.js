@@ -144,13 +144,21 @@ test.describe('CIS Org Health Dashboard', () => {
     expect(emptyText).toMatch(/board|sprint/i);
   });
 
-  test('capacity cards appear after selecting board (sprint optional)', async ({ page }) => {
-    // Board-only filter is enough — sprint is optional
+  test('capacity cards appear after selecting board + specific sprint', async ({ page }) => {
+    // Both board AND a specific sprint are required
     const boardSel = page.locator('#f-board');
     const boardOptions = await boardSel.locator('option').allInnerTexts();
     const firstBoard = boardOptions.find(o => o.trim() && !/all/i.test(o));
     expect(firstBoard).toBeTruthy();
     await boardSel.selectOption({ label: firstBoard });
+    await page.waitForTimeout(300);
+
+    // Select first specific sprint (not "All")
+    const sprintSel = page.locator('#f-sprint-sel');
+    const sprintOptions = await sprintSel.locator('option').allInnerTexts();
+    const firstSprint = sprintOptions.find(o => o.trim() && !/all/i.test(o));
+    if (!firstSprint) { test.skip(); return; }
+    await sprintSel.selectOption({ label: firstSprint });
     await page.waitForTimeout(400);
 
     // Switch to Delivery tab
@@ -160,14 +168,13 @@ test.describe('CIS Org Health Dashboard', () => {
       return pane && pane.classList.contains('active');
     }, { timeout: 8_000 });
 
-    // Read capacity-cards content via evaluate (avoids visibility issues)
     const result = await page.evaluate(() => {
       const el = document.getElementById('capacity-cards');
       if (!el) return { html: '', text: '' };
       return { html: el.innerHTML, text: el.innerText };
     });
 
-    // Must NOT show the "filter by board+sprint" prompt
+    // Must NOT show the empty state prompt
     expect(result.text).not.toMatch(/Filter by.*board/i);
 
     // If cards rendered, verify structure
