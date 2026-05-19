@@ -448,6 +448,25 @@ tr.ticket-col-hdr.hidden{display:none;}
 ::-webkit-scrollbar-thumb:hover{background:var(--muted2);}
 .empty{text-align:center;padding:40px;color:var(--muted);font-size:13px;}
 .dot-sep{width:4px;height:4px;border-radius:50%;background:var(--border);display:inline-block;margin:0 4px;}
+/* Capacity card grid */
+.cap-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px;padding:4px 0;}
+.cap-card{background:var(--card2,#f8fafc);border:1px solid var(--border);border-radius:8px;padding:12px 14px 10px;display:flex;flex-direction:column;gap:6px;}
+.cap-card-header{display:flex;align-items:center;justify-content:space-between;gap:6px;}
+.cap-card-name{font-size:12px;font-weight:600;color:var(--fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;}
+.cap-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
+.cap-dot-green{background:#22c55e;}
+.cap-dot-yellow{background:#f59e0b;}
+.cap-dot-red{background:#ef4444;}
+.cap-fraction{font-size:11px;color:var(--muted);margin-top:-2px;}
+.cap-bar-track{height:7px;background:var(--border);border-radius:4px;overflow:hidden;}
+.cap-bar-fill{height:100%;border-radius:4px;transition:width .3s;}
+.cap-bar-fill-green{background:linear-gradient(90deg,#34d399,#22c55e);}
+.cap-bar-fill-yellow{background:linear-gradient(90deg,#fbbf24,#f59e0b);}
+.cap-bar-fill-red{background:linear-gradient(90deg,#f87171,#ef4444);}
+.cap-pct{font-size:10px;color:var(--muted);text-align:right;}
+.cap-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:36px 20px;color:var(--muted);text-align:center;}
+.cap-empty-icon{font-size:28px;opacity:.55;}
+.cap-empty-text{font-size:12px;line-height:1.5;}
 </style>
 </head>
 <body>
@@ -573,13 +592,8 @@ tr.ticket-col-hdr.hidden{display:none;}
       <div class="chart-wrap" id="chart-effort-wrap"><canvas id="chart-effort"></canvas></div>
     </div>
     <div class="chart-card">
-      <h3>Capacity by Assignee <span class="sub">SP by epic · 10 SP cap · gray = buffer</span></h3>
-      <div class="chart-wrap" id="chart-capacity-wrap"><canvas id="chart-capacity"></canvas></div>
-      <div id="chart-capacity-pager" style="display:none;align-items:center;justify-content:space-between;padding:6px 2px 0;font-size:11px;color:var(--muted);">
-        <button id="cap-prev" onclick="capacityPagePrev()" style="background:none;border:none;cursor:pointer;font-size:11px;color:var(--accent);padding:0;">&#8592; Prev</button>
-        <span id="cap-page-label"></span>
-        <button id="cap-next" onclick="capacityPageNext()" style="background:none;border:none;cursor:pointer;font-size:11px;color:var(--accent);padding:0;">Next &#8594;</button>
-      </div>
+      <h3>Capacity by Assignee <span class="sub">SP consumed vs 10 SP cap</span></h3>
+      <div id="capacity-cards"></div>
     </div>
   </div>
   <div class="section-heading">Sprint Data Table</div>
@@ -2382,228 +2396,73 @@ function renderEffortChart() {
   if (wrap) wrap.appendChild(legend);
 }
 
-var CAPACITY_PAGE_SIZE    = 8;
-var CAPACITY_PAGE         = 0;
-var CAPACITY_ENTRIES      = [];  // [{name, totalSP, epics:{epicLabel:sp}, buffer}]
-var CAPACITY_EPIC_KEYS    = [];  // ordered epic label list for this render
-var CAPACITY_DEFAULT_SP   = 10; // assumed sprint capacity ceiling per person
-
-// Palette for epic segments — cycles if more epics than colors
-var CAP_EPIC_PALETTE = [
-  'rgba(59,130,246,0.82)',  // blue
-  'rgba(139,92,246,0.82)',  // purple
-  'rgba(20,184,166,0.82)',  // teal
-  'rgba(245,158,11,0.82)',  // amber
-  'rgba(239,68,68,0.82)',   // red
-  'rgba(34,197,94,0.82)',   // green
-  'rgba(249,115,22,0.82)',  // orange
-  'rgba(236,72,153,0.82)',  // pink
-];
+var CAPACITY_DEFAULT_SP = 10;
 
 function renderCapacityChart() {
-  var source = FILTERED.length ? FILTERED : ACTIVE_SPRINTS;
+  var el = document.getElementById('capacity-cards');
+  if (!el) return;
 
-  // Build per-dev SP map keyed by epic label, sourced from epicBreakdown tickets
-  var devEpicSP   = {};  // devName -> {epicLabel: sp}
-  var devTotalSP  = {};  // devName -> total committed SP
-  var epicSet     = {};  // track all epic labels in order seen
+  var boardVal  = (document.getElementById('f-board')  || {}).value || '';
+  var sprintVal = (document.getElementById('f-sprint') || {}).value || '';
 
-  source.forEach(function(d) {
-    (d.epicBreakdown || []).forEach(function(epic) {
-      var epicLabel = epic.label || 'Other';
-      (epic.tickets || []).forEach(function(t) {
-        var name = t.assignee || 'Unassigned';
-        var sp   = t.sp || 0;
-        if (!devEpicSP[name])  devEpicSP[name]  = {};
-        if (!devTotalSP[name]) devTotalSP[name] = 0;
-        devEpicSP[name][epicLabel] = (devEpicSP[name][epicLabel] || 0) + sp;
-        devTotalSP[name]          += sp;
-        epicSet[epicLabel] = true;
-      });
-    });
-
-    // Fallback: if no epicBreakdown, use ticketsPerDev with generic label
-    if (!(d.epicBreakdown || []).length) {
-      (d.ticketsPerDev || []).forEach(function(entry) {
-        var name = entry.dev || 'Unassigned';
-        var sp   = entry.sp || 0;
-        if (!devEpicSP[name])  devEpicSP[name]  = {};
-        if (!devTotalSP[name]) devTotalSP[name] = 0;
-        devEpicSP[name]['Committed'] = (devEpicSP[name]['Committed'] || 0) + sp;
-        devTotalSP[name]            += sp;
-        epicSet['Committed'] = true;
-      });
-    }
-  });
-
-  // Sort people: highest total SP first, Unassigned last
-  CAPACITY_ENTRIES = Object.keys(devTotalSP).sort(function(a, b) {
-    if (a === 'Unassigned') return 1;
-    if (b === 'Unassigned') return -1;
-    return devTotalSP[b] - devTotalSP[a];
-  }).map(function(name) {
-    var committed = devTotalSP[name];
-    var buffer    = Math.max(0, CAPACITY_DEFAULT_SP - committed);
-    return { name: name, totalSP: committed, epics: devEpicSP[name] || {}, buffer: buffer };
-  });
-
-  // Epic order: by total SP desc — cap at top 5, merge rest into "Other"
-  var epicTotals = {};
-  Object.values(devEpicSP).forEach(function(epicMap) {
-    Object.entries(epicMap).forEach(function(kv) {
-      epicTotals[kv[0]] = (epicTotals[kv[0]] || 0) + kv[1];
-    });
-  });
-  var allEpicsSorted = Object.keys(epicTotals).sort(function(a, b) {
-    return epicTotals[b] - epicTotals[a];
-  });
-  var MAX_EPICS = 5;
-  var topEpics  = allEpicsSorted.slice(0, MAX_EPICS);
-  var restEpics = allEpicsSorted.slice(MAX_EPICS);
-
-  // Collapse overflow epics into "Other" on each dev's epic map
-  if (restEpics.length > 0) {
-    Object.values(devEpicSP).forEach(function(epicMap) {
-      var other = 0;
-      restEpics.forEach(function(k) { other += epicMap[k] || 0; delete epicMap[k]; });
-      if (other > 0) epicMap['Other'] = (epicMap['Other'] || 0) + other;
-    });
-    topEpics.push('Other');
-  }
-
-  // Recalculate buffer after collapsing
-  CAPACITY_ENTRIES.forEach(function(entry) {
-    var committed = Object.values(entry.epics).reduce(function(s,v){ return s+v; }, 0);
-    entry.totalSP = committed;
-    entry.buffer  = Math.max(0, CAPACITY_DEFAULT_SP - committed);
-  });
-
-  CAPACITY_EPIC_KEYS = topEpics;
-
-  CAPACITY_PAGE = 0;
-  renderCapacityPage();
-}
-
-function renderCapacityPage() {
-  var entries    = CAPACITY_ENTRIES;
-  var epicKeys   = CAPACITY_EPIC_KEYS;
-  var totalPages = Math.max(1, Math.ceil(entries.length / CAPACITY_PAGE_SIZE));
-  CAPACITY_PAGE  = Math.min(Math.max(0, CAPACITY_PAGE), totalPages - 1);
-
-  var wrap = document.getElementById('chart-capacity-wrap');
-  if (!wrap) return;
-
-  if (!entries.length) {
-    wrap.innerHTML = '<canvas id="chart-capacity"></canvas><div style="color:var(--muted);font-size:11px;padding:8px 0;">No assignee data available</div>';
-    var pager0 = document.getElementById('chart-capacity-pager');
-    if (pager0) pager0.style.display = 'none';
+  // Empty state: must have both a single board AND a specific sprint selected
+  if (!boardVal || !sprintVal) {
+    el.innerHTML =
+      '<div class="cap-empty">' +
+        '<div class="cap-empty-icon">&#128100;</div>' +
+        '<div class="cap-empty-text">Filter by <strong>board</strong> and <strong>sprint</strong><br>to see your team\'s capacity</div>' +
+      '</div>';
     return;
   }
 
-  if (!wrap.querySelector('canvas')) {
-    wrap.innerHTML = '<canvas id="chart-capacity"></canvas>';
+  var source = FILTERED.length ? FILTERED : ACTIVE_SPRINTS;
+
+  // Aggregate SP per dev from ticketsPerDev across matching rows
+  var devSP = {};
+  source.forEach(function(d) {
+    (d.ticketsPerDev || []).forEach(function(entry) {
+      var name = entry.dev || 'Unassigned';
+      devSP[name] = (devSP[name] || 0) + (entry.sp || 0);
+    });
+  });
+
+  var people = Object.keys(devSP).sort(function(a, b) {
+    if (a === 'Unassigned') return 1;
+    if (b === 'Unassigned') return -1;
+    return devSP[b] - devSP[a];
+  });
+
+  if (!people.length) {
+    el.innerHTML =
+      '<div class="cap-empty">' +
+        '<div class="cap-empty-icon">&#128100;</div>' +
+        '<div class="cap-empty-text">No assignee data for this sprint</div>' +
+      '</div>';
+    return;
   }
-  var ctx = document.getElementById('chart-capacity');
-  if (!ctx) return;
-  destroyChart('chart-capacity');
 
-  var start = CAPACITY_PAGE * CAPACITY_PAGE_SIZE;
-  var page  = entries.slice(start, start + CAPACITY_PAGE_SIZE);
-  var names = page.map(function(e) { return e.name; });
-
-  // One dataset per epic + one for buffer
-  var datasets = epicKeys.map(function(epicLabel, i) {
-    var color = CAP_EPIC_PALETTE[i % CAP_EPIC_PALETTE.length];
-    return {
-      label: epicLabel,
-      data:  page.map(function(e) { return +(e.epics[epicLabel] || 0).toFixed(1); }),
-      backgroundColor: color,
-      borderRadius: 2,
-      borderSkipped: false,
-    };
+  var cap = CAPACITY_DEFAULT_SP;
+  var html = '<div class="cap-grid">';
+  people.forEach(function(name) {
+    var consumed = devSP[name];
+    var pct      = cap > 0 ? Math.min(100, Math.round(consumed / cap * 100)) : 0;
+    var dotClass = pct >= 90 ? 'cap-dot-red' : pct >= 70 ? 'cap-dot-yellow' : 'cap-dot-green';
+    var barClass = pct >= 90 ? 'cap-bar-fill-red' : pct >= 70 ? 'cap-bar-fill-yellow' : 'cap-bar-fill-green';
+    var displayName = name.length > 22 ? name.slice(0, 21) + '…' : name;
+    html +=
+      '<div class="cap-card">' +
+        '<div class="cap-card-header">' +
+          '<span class="cap-card-name" title="' + name + '">' + displayName + '</span>' +
+          '<span class="cap-dot ' + dotClass + '"></span>' +
+        '</div>' +
+        '<div class="cap-fraction">' + consumed.toFixed(1) + ' / ' + cap + ' SP</div>' +
+        '<div class="cap-bar-track"><div class="cap-bar-fill ' + barClass + '" style="width:' + pct + '%"></div></div>' +
+        '<div class="cap-pct">' + pct + '% consumed</div>' +
+      '</div>';
   });
-
-  // Buffer segment (gray, last)
-  datasets.push({
-    label: 'Buffer',
-    data:  page.map(function(e) { return +e.buffer.toFixed(1); }),
-    backgroundColor: 'rgba(203,213,225,0.45)',
-    borderRadius: 2,
-    borderSkipped: false,
-  });
-
-  var chartH = Math.max(180, page.length * 34);
-  wrap.style.height = chartH + 'px';
-  ctx.style.cssText = '';
-
-  CHARTS['chart-capacity'] = new Chart(ctx, {
-    type: 'bar',
-    data: { labels: names, datasets: datasets },
-    options: {
-      indexAxis: 'y',
-      responsive: true,
-      maintainAspectRatio: false,
-      interaction: { mode: 'index', intersect: false },
-      plugins: {
-        legend: {
-          display: true, position: 'top',
-          labels: { font: { size: 10 }, boxWidth: 10, padding: 6,
-            filter: function(item) { return item.text !== 'Buffer' || page.some(function(e){ return e.buffer > 0; }); },
-            generateLabels: function(chart) {
-              return Chart.defaults.plugins.legend.labels.generateLabels(chart).map(function(item) {
-                var max = 28;
-                item.text = item.text.length > max ? item.text.slice(0, max) + '…' : item.text;
-                return item;
-              });
-            }
-          }
-        },
-        tooltip: {
-          callbacks: {
-            title: function(items) {
-              var e = page[items[0].dataIndex];
-              return e.name + '  (' + e.totalSP.toFixed(1) + ' SP committed / ' + CAPACITY_DEFAULT_SP + ' cap)';
-            },
-            label: function(item) {
-              if (item.raw === 0) return null;
-              var pct = CAPACITY_DEFAULT_SP > 0 ? Math.round(item.raw / CAPACITY_DEFAULT_SP * 100) : 0;
-              return '  ' + item.dataset.label + ': ' + item.raw + ' SP  (' + pct + '%)';
-            }
-          }
-        }
-      },
-      scales: {
-        x: {
-          stacked: true,
-          max: CAPACITY_DEFAULT_SP,
-          grid: { color: 'rgba(0,0,0,0.05)' },
-          ticks: { font: { size: 10 } },
-          title: { display: true, text: 'Story Points  (cap: ' + CAPACITY_DEFAULT_SP + ' SP/person)', font: { size: 10 }, color: 'var(--muted)' }
-        },
-        y: { stacked: true, ticks: { font: { size: 10 } }, grid: { display: false } }
-      }
-    }
-  });
-
-  // Pager
-  var pager = document.getElementById('chart-capacity-pager');
-  if (pager) {
-    if (totalPages > 1) {
-      pager.style.display = 'flex';
-      var lbl = document.getElementById('cap-page-label');
-      if (lbl) lbl.textContent = (CAPACITY_PAGE + 1) + ' / ' + totalPages + '  (' + entries.length + ' people)';
-      var prev = document.getElementById('cap-prev');
-      var next = document.getElementById('cap-next');
-      if (prev) prev.style.visibility = CAPACITY_PAGE === 0 ? 'hidden' : 'visible';
-      if (next) next.style.visibility = CAPACITY_PAGE >= totalPages - 1 ? 'hidden' : 'visible';
-    } else {
-      pager.style.display = 'none';
-    }
-  }
+  html += '</div>';
+  el.innerHTML = html;
 }
-
-function capacityPagePrev() { CAPACITY_PAGE--; renderCapacityPage(); }
-function capacityPageNext() { CAPACITY_PAGE++; renderCapacityPage(); }
 
 function renderSHDTable() {
   var tbody = document.getElementById('shd-tbody');
