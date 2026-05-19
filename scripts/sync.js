@@ -62,15 +62,18 @@ function jiraGet(urlPath) {
 
 async function fetchActiveIssues(board) {
   const jql    = encodeURIComponent(`project = ${board} AND sprint in openSprints() ORDER BY created ASC`);
-  const fields = 'customfield_10034,customfield_10016,status';
+  const fields = 'customfield_10034,customfield_10016,status,labels';
   let issues = [];
-  let startAt = 0;
+  let nextPageToken = undefined;
 
   while (true) {
-    const data = await jiraGet(`/search/jql?jql=${jql}&fields=${fields}&maxResults=100&startAt=${startAt}`);
+    const qs = nextPageToken
+      ? `/search/jql?jql=${jql}&fields=${fields}&maxResults=100&nextPageToken=${encodeURIComponent(nextPageToken)}`
+      : `/search/jql?jql=${jql}&fields=${fields}&maxResults=100`;
+    const data = await jiraGet(qs);
     issues = issues.concat(data.issues || []);
-    if (issues.length >= data.total) break;
-    startAt += 100;
+    if (!data.nextPageToken || !(data.issues || []).length) break;
+    nextPageToken = data.nextPageToken;
   }
   return issues;
 }
