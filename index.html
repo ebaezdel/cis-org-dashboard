@@ -475,7 +475,7 @@ tr.ticket-col-hdr.hidden{display:none;}
 
 <!-- ═══ SHD ═══════════════════════════════════════════════════════════════════ -->
 <div class="pane active" id="pane-shd">
-  <div class="section-heading">CIS Org Sprints Health Summary</div>
+  <div class="section-heading" id="kpi-heading">CIS Org Sprints Health Summary</div>
   <div id="shd-kpi" class="kpi-strip"></div>
   <div class="section-heading" id="board-health-heading">Board Health &mdash; Active Sprint</div>
   <div class="board-grid" id="board-health-grid"></div>
@@ -1736,8 +1736,6 @@ function applyFilters() {
 }
 
 function updateBoardHealthHeading() {
-  var el = document.getElementById('board-health-heading');
-  if (!el) return;
   var parts = [];
   var fy     = document.getElementById('f-fy').value;
   var q      = document.getElementById('f-q').value;
@@ -1752,7 +1750,10 @@ function updateBoardHealthHeading() {
   if (board)  parts.push(board);
   if (status) parts.push(status.charAt(0).toUpperCase() + status.slice(1));
   var suffix = parts.length ? parts.join(' · ') : 'All';
-  el.textContent = 'Board Health — ' + suffix;
+  var bhEl = document.getElementById('board-health-heading');
+  if (bhEl) bhEl.textContent = 'Board Health — ' + suffix;
+  var kpiEl = document.getElementById('kpi-heading');
+  if (kpiEl) kpiEl.textContent = 'CIS Org Sprints Health Summary — ' + suffix;
 }
 
 function updateClearButton() {
