@@ -1941,11 +1941,15 @@ function renderBoardHealthGrid(containerId) {
   if (!data.length) { el.innerHTML = '<p style="color:var(--muted);padding:12px">No data for selected filters.</p>'; return; }
 
   el.innerHTML = data.map(function(d){
-    var isNone = d.sprintStatus === 'none' || d.totalSP === 0;
+    var hasWork = d.issues > 0 || d.totalSP > 0;
+    var isNone  = !hasWork;
     var pct = isNone ? 0 : d.spRes;
     var hc = isNone ? 'none' : healthClass(pct);
     var pctClass = isNone ? 'none' : pctColor(pct);
     var barColor = isNone ? 'var(--muted)' : 'var(--' + pctColor(pct) + ')';
+    var sprintLabel = isNone
+      ? (d._sprintCount > 1 ? d._sprintCount + ' sprints · no work planned' : 'No work planned')
+      : (d._multiSprint ? d._multiSprint : d.sprintName);
     return '<div class="board-card health-' + hc + '">' +
       '<div class="bc-header">' +
         '<div><div class="bc-name">' + d.board + '</div><div class="bc-em">' + d.em + '</div></div>' +
@@ -1956,7 +1960,7 @@ function renderBoardHealthGrid(containerId) {
         '<span>' + (isNone ? '0' : d.doneSP) + ' / ' + (isNone ? '—' : d.totalSP) + ' SP</span>' +
         '<span>' + (isNone ? '—' : d.issues + ' issues') + '</span>' +
       '</div>' +
-      '<div class="bc-sprint">' + (isNone ? 'No active sprint' : (d._multiSprint ? d._multiSprint : d.sprintName)) + '</div>' +
+      '<div class="bc-sprint">' + sprintLabel + '</div>' +
       ((!isNone && d.startDate && !d._multiSprint) ? '<div class="bc-dates">' + d.startDate + ' → ' + (d.endDate || '?') + '</div>' : '') +
     '</div>';
   }).join('');
