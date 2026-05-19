@@ -1907,13 +1907,7 @@ function renderBoardHealthGrid(containerId) {
   var statusF = document.getElementById('f-status') ? document.getElementById('f-status').value  : '';
   var periodF = document.getElementById('f-period') ? document.getElementById('f-period').value  : '';
 
-  // Update heading
-  var hdg = document.getElementById('board-health-heading');
-  if (hdg) {
-    var ctx = periodF ? periodF.replace(/[{}"]/g,'') : (!statusF ? 'All Sprints' : statusF === 'active' ? 'Active Sprint' : statusF === 'future' ? 'Future Sprints' : 'Closed Sprints');
-    try { var pv = JSON.parse(periodF); ctx = pv.fy + '.' + pv.q + (pv.sprint ? '.S' + pv.sprint : ' — All'); } catch(e){}
-    hdg.textContent = 'Board Health — ' + ctx;
-  }
+  updateBoardHealthHeading();
 
   // Aggregate all FILTERED rows per board
   var source = FILTERED.length ? FILTERED : ACTIVE_SPRINTS;
