@@ -2213,7 +2213,27 @@ function renderVelocityChart(canvasId) {
   var ctx  = document.getElementById(canvasId);
   if (!ctx) return;
 
+  var boardVal = (document.getElementById('f-board') || {}).value || '';
   var source = FILTERED.length ? FILTERED : ACTIVE_SPRINTS;
+
+  // Show prompt when no board is selected
+  if (!boardVal) {
+    if (ctx) ctx.style.display = 'none';
+    var existing = wrap ? wrap.querySelector('.epic-empty') : null;
+    if (!existing && wrap) {
+      var msg = document.createElement('div');
+      msg.className = 'epic-empty';
+      msg.style.cssText = 'display:flex;align-items:center;justify-content:center;height:100%;flex-direction:column;gap:8px;color:var(--muted);font-size:12px;text-align:center;';
+      msg.innerHTML = '<span style="font-size:28px;opacity:.55;">&#128202;</span><strong>Filter by board and sprint</strong><span>to see SP distribution by Epic</span>';
+      wrap.appendChild(msg);
+    }
+    return;
+  }
+
+  // Remove stale empty state before rendering
+  var staleEmpty = wrap ? wrap.querySelector('.epic-empty') : null;
+  if (staleEmpty) staleEmpty.remove();
+  if (ctx) ctx.style.display = '';
 
   // Aggregate epicBreakdown across all visible sprint rows
   var epicMap = {};  // epicKey → {label, issues, sp, done}
@@ -2230,23 +2250,17 @@ function renderVelocityChart(canvasId) {
   });
 
   if (!hasData) {
-    // Empty state — show placeholder message instead of chart
     if (ctx) ctx.style.display = 'none';
-    var existing = wrap ? wrap.querySelector('.epic-empty') : null;
-    if (!existing && wrap) {
-      var msg = document.createElement('div');
-      msg.className = 'epic-empty';
-      msg.style.cssText = 'display:flex;align-items:center;justify-content:center;height:100%;flex-direction:column;gap:8px;color:var(--muted);font-size:12px;';
-      msg.innerHTML = '<span style="font-size:24px;">📋</span><strong>No epic data yet</strong><span>Populate <code>epicBreakdown[]</code> via Jira sync to see issues grouped by Epic/Parent.</span>';
-      wrap.appendChild(msg);
+    var existing2 = wrap ? wrap.querySelector('.epic-empty') : null;
+    if (!existing2 && wrap) {
+      var msg2 = document.createElement('div');
+      msg2.className = 'epic-empty';
+      msg2.style.cssText = 'display:flex;align-items:center;justify-content:center;height:100%;flex-direction:column;gap:8px;color:var(--muted);font-size:12px;';
+      msg2.innerHTML = '<span style="font-size:24px;">📋</span><strong>No epic data yet</strong><span>Populate <code>epicBreakdown[]</code> via Jira sync.</span>';
+      wrap.appendChild(msg2);
     }
     return;
   }
-
-  // Remove empty state if data arrives
-  var empty = wrap ? wrap.querySelector('.epic-empty') : null;
-  if (empty) empty.remove();
-  if (ctx) ctx.style.display = '';
 
   // Sort by SP desc, cap at 10 epics
   var epics = Object.values(epicMap).sort(function(a,b){ return b.sp - a.sp; }).slice(0, 10);
@@ -2402,11 +2416,10 @@ function renderCapacityChart() {
   var el = document.getElementById('capacity-cards');
   if (!el) return;
 
-  var boardVal  = (document.getElementById('f-board')  || {}).value || '';
-  var sprintVal = (document.getElementById('f-sprint') || {}).value || '';
+  var boardVal = (document.getElementById('f-board') || {}).value || '';
 
-  // Empty state: must have both a single board AND a specific sprint selected
-  if (!boardVal || !sprintVal) {
+  // Empty state: at minimum a board must be selected
+  if (!boardVal) {
     el.innerHTML =
       '<div class="cap-empty">' +
         '<div class="cap-empty-icon">&#128100;</div>' +

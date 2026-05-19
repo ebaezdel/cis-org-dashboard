@@ -144,21 +144,13 @@ test.describe('CIS Org Health Dashboard', () => {
     expect(emptyText).toMatch(/board|sprint/i);
   });
 
-  test('capacity cards appear after selecting board + sprint', async ({ page }) => {
-    // Select board first (while on Sprints tab — filters are global)
+  test('capacity cards appear after selecting board (sprint optional)', async ({ page }) => {
+    // Board-only filter is enough — sprint is optional
     const boardSel = page.locator('#f-board');
     const boardOptions = await boardSel.locator('option').allInnerTexts();
     const firstBoard = boardOptions.find(o => o.trim() && !/all/i.test(o));
     expect(firstBoard).toBeTruthy();
     await boardSel.selectOption({ label: firstBoard });
-    await page.waitForTimeout(300);
-
-    // Select first available sprint
-    const sprintSel = page.locator('#f-sprint-sel');
-    const sprintOptions = await sprintSel.locator('option').allInnerTexts();
-    const firstSprint = sprintOptions.find(o => o.trim() && !/all/i.test(o));
-    if (!firstSprint) { test.skip(); return; }
-    await sprintSel.selectOption({ label: firstSprint });
     await page.waitForTimeout(400);
 
     // Switch to Delivery tab
