@@ -126,6 +126,59 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-s
 .tab-btn:hover{color:var(--text);}
 .tab-btn.active{color:var(--accent);background:var(--surface);font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,.08);}
 
+/* Mobile filter drawer */
+.mob-filter-btn{display:none;}
+@media(max-width:700px){
+  .toolbar{padding:0 12px;}
+  .toolbar-filters{display:none;}
+  .mob-filter-btn{
+    display:inline-flex;align-items:center;gap:6px;
+    padding:6px 14px;margin:6px 0;border-radius:8px;
+    border:1px solid var(--border);background:var(--surface);color:var(--text2);
+    font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;flex-shrink:0;
+  }
+  .mob-filter-btn.has-filters{border-color:var(--accent);color:var(--accent);background:var(--accent-bg);}
+  .filter-drawer{
+    position:fixed;bottom:0;left:0;right:0;z-index:200;
+    background:var(--surface);border-top:1px solid var(--border);
+    border-radius:16px 16px 0 0;
+    padding:0 20px 32px;
+    box-shadow:0 -4px 24px rgba(0,0,0,.12);
+    transform:translateY(100%);transition:transform .28s cubic-bezier(.4,0,.2,1);
+    max-height:85vh;overflow-y:auto;
+  }
+  .filter-drawer.open{transform:translateY(0);}
+  .filter-drawer-handle{
+    width:36px;height:4px;background:var(--border2);border-radius:2px;
+    margin:10px auto 16px;
+  }
+  .filter-drawer-title{
+    font-size:13px;font-weight:700;color:var(--text);
+    margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;
+  }
+  .filter-drawer .filter-group{
+    display:flex;flex-direction:column;align-items:flex-start;
+    border:none;padding:10px 0;border-bottom:1px solid var(--border);
+    gap:6px;width:100%;
+  }
+  .filter-drawer .filter-group:last-child{border-bottom:none;}
+  .filter-drawer .filter-group select{width:100%;font-size:14px;padding:8px 30px 8px 12px;}
+  .filter-drawer .filter-group label{font-size:11px;}
+  .filter-drawer-footer{
+    display:flex;gap:10px;margin-top:16px;
+  }
+  .filter-drawer-footer .btn-clear-filters{flex:1;justify-content:center;padding:10px;font-size:12px;}
+  .filter-drawer-close{
+    background:var(--accent);color:#fff;border:none;border-radius:8px;
+    flex:1;padding:10px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;
+  }
+  .filter-drawer-overlay{
+    display:none;position:fixed;inset:0;z-index:199;background:rgba(0,0,0,.3);
+  }
+  .filter-drawer-overlay.open{display:block;}
+  .content{padding:14px 12px;}
+}
+
 .content{padding:20px 24px;}
 .pane{display:none;}
 .pane.active{display:block;}
@@ -432,34 +485,43 @@ tr.ticket-col-hdr.hidden{display:none;}
 
 <!-- Filter + Tab bar -->
 <div class="toolbar">
-  <div class="filter-group">
-    <label>Status</label>
-    <select id="f-status" onchange="onStatusChange()">
-    </select>
+  <!-- Mobile: filter toggle button (hidden on desktop) -->
+  <button class="mob-filter-btn" id="mob-filter-btn" onclick="openFilterDrawer()">
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2 4h12M4 8h8M6 12h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+    Filters <span id="mob-filter-count" style="display:none;background:var(--accent);color:#fff;border-radius:10px;padding:1px 6px;font-size:10px;"></span>
+  </button>
+
+  <!-- Desktop filters (hidden on mobile via .toolbar-filters) -->
+  <div class="toolbar-filters" style="display:contents;">
+    <div class="filter-group">
+      <label>Status</label>
+      <select id="f-status" onchange="onStatusChange()"></select>
+    </div>
+    <div class="filter-group">
+      <label>Period</label>
+      <select id="f-period" onchange="onPeriodChange()"></select>
+    </div>
+    <div class="filter-group">
+      <label>Sprints</label>
+      <select id="f-sprint-sel" onchange="onSprintSelChange()" style="max-width:180px;"></select>
+    </div>
+    <!-- backing fields read by filter/chart logic — hidden -->
+    <input id="f-fy" type="hidden" value="">
+    <input id="f-q"  type="hidden" value="">
+    <input id="f-sprint" type="hidden" value="">
+    <div class="filter-group">
+      <label>EM</label>
+      <select id="f-em" onchange="onEmChange()"></select>
+    </div>
+    <div class="filter-group">
+      <label>Board</label>
+      <select id="f-board" onchange="onBoardChange()"></select>
+    </div>
+    <div class="filter-group" style="border-right:none;">
+      <button class="btn-clear-filters" id="btn-clear-filters" onclick="clearAllFilters()" title="Reset all filters">&#10005; Clear</button>
+    </div>
   </div>
-  <div class="filter-group">
-    <label>Period</label>
-    <select id="f-period" onchange="onPeriodChange()"></select>
-  </div>
-  <div class="filter-group">
-    <label>Sprints</label>
-    <select id="f-sprint-sel" onchange="onSprintSelChange()" style="max-width:180px;"></select>
-  </div>
-  <!-- backing fields read by filter/chart logic — hidden -->
-  <input id="f-fy" type="hidden" value="">
-  <input id="f-q"  type="hidden" value="">
-  <input id="f-sprint" type="hidden" value="">
-  <div class="filter-group">
-    <label>EM</label>
-    <select id="f-em" onchange="onEmChange()"></select>
-  </div>
-  <div class="filter-group">
-    <label>Board</label>
-    <select id="f-board" onchange="onBoardChange()"></select>
-  </div>
-  <div class="filter-group" style="border-right:none;">
-    <button class="btn-clear-filters" id="btn-clear-filters" onclick="clearAllFilters()" title="Reset all filters">&#10005; Clear</button>
-  </div>
+
   <div style="margin-left:auto;display:flex;align-items:center;padding:0 0 0 12px;flex-shrink:0;">
     <div class="tabs-inline">
       <div class="tab-btn active" onclick="showTab('shd')">Sprints</div>
@@ -467,6 +529,40 @@ tr.ticket-col-hdr.hidden{display:none;}
       <div class="tab-btn" onclick="showTab('hierarchy')">Initiatives</div>
       <div class="tab-btn" onclick="showTab('dora')">DORA</div>
     </div>
+  </div>
+</div>
+
+<!-- Mobile filter drawer -->
+<div class="filter-drawer-overlay" id="filter-drawer-overlay" onclick="closeFilterDrawer()"></div>
+<div class="filter-drawer" id="filter-drawer">
+  <div class="filter-drawer-handle"></div>
+  <div class="filter-drawer-title">
+    <span>Filters</span>
+    <span id="mob-active-label" style="font-size:11px;color:var(--muted);font-weight:400;"></span>
+  </div>
+  <div class="filter-group">
+    <label>Status</label>
+    <select id="fd-status" onchange="syncDrawerFilter('f-status','fd-status');onStatusChange();"></select>
+  </div>
+  <div class="filter-group">
+    <label>Period</label>
+    <select id="fd-period" onchange="syncDrawerFilter('f-period','fd-period');onPeriodChange();"></select>
+  </div>
+  <div class="filter-group">
+    <label>Sprint</label>
+    <select id="fd-sprint-sel" onchange="syncDrawerFilter('f-sprint-sel','fd-sprint-sel');onSprintSelChange();"></select>
+  </div>
+  <div class="filter-group">
+    <label>EM</label>
+    <select id="fd-em" onchange="syncDrawerFilter('f-em','fd-em');onEmChange();"></select>
+  </div>
+  <div class="filter-group">
+    <label>Board</label>
+    <select id="fd-board" onchange="syncDrawerFilter('f-board','fd-board');onBoardChange();"></select>
+  </div>
+  <div class="filter-drawer-footer">
+    <button class="btn-clear-filters" onclick="clearAllFilters();closeFilterDrawer();">&#10005; Clear all</button>
+    <button class="filter-drawer-close" onclick="closeFilterDrawer()">Done</button>
   </div>
 </div>
 
@@ -492,7 +588,7 @@ tr.ticket-col-hdr.hidden{display:none;}
       <div class="chart-wrap" id="chart-effort-wrap"><canvas id="chart-effort"></canvas></div>
     </div>
     <div class="chart-card">
-      <h3>Capacity by Assignee <span class="sub">SP &amp; tickets per person · active sprint(s)</span></h3>
+      <h3>Capacity by Assignee <span class="sub">SP by epic · 10 SP cap · gray = buffer</span></h3>
       <div class="chart-wrap" id="chart-capacity-wrap"><canvas id="chart-capacity"></canvas></div>
       <div id="chart-capacity-pager" style="display:none;align-items:center;justify-content:space-between;padding:6px 2px 0;font-size:11px;color:var(--muted);">
         <button id="cap-prev" onclick="capacityPagePrev()" style="background:none;border:none;cursor:pointer;font-size:11px;color:var(--accent);padding:0;">&#8592; Prev</button>
@@ -1775,6 +1871,8 @@ function updateClearButton() {
     document.getElementById('f-board').value,
   ].filter(Boolean).length;
   btn.classList.toggle('has-filters', activeCount > 0);
+  // Keep mobile drawer in sync
+  if (typeof syncMainToDrawer === 'function') syncMainToDrawer();
 }
 
 
@@ -2360,16 +2458,38 @@ function renderCapacityChart() {
     return { name: name, totalSP: committed, epics: devEpicSP[name] || {}, buffer: buffer };
   });
 
-  // Epic order: by total SP across all devs desc
+  // Epic order: by total SP desc — cap at top 5, merge rest into "Other"
   var epicTotals = {};
   Object.values(devEpicSP).forEach(function(epicMap) {
     Object.entries(epicMap).forEach(function(kv) {
       epicTotals[kv[0]] = (epicTotals[kv[0]] || 0) + kv[1];
     });
   });
-  CAPACITY_EPIC_KEYS = Object.keys(epicTotals).sort(function(a, b) {
+  var allEpicsSorted = Object.keys(epicTotals).sort(function(a, b) {
     return epicTotals[b] - epicTotals[a];
   });
+  var MAX_EPICS = 5;
+  var topEpics  = allEpicsSorted.slice(0, MAX_EPICS);
+  var restEpics = allEpicsSorted.slice(MAX_EPICS);
+
+  // Collapse overflow epics into "Other" on each dev's epic map
+  if (restEpics.length > 0) {
+    Object.values(devEpicSP).forEach(function(epicMap) {
+      var other = 0;
+      restEpics.forEach(function(k) { other += epicMap[k] || 0; delete epicMap[k]; });
+      if (other > 0) epicMap['Other'] = (epicMap['Other'] || 0) + other;
+    });
+    topEpics.push('Other');
+  }
+
+  // Recalculate buffer after collapsing
+  CAPACITY_ENTRIES.forEach(function(entry) {
+    var committed = Object.values(entry.epics).reduce(function(s,v){ return s+v; }, 0);
+    entry.totalSP = committed;
+    entry.buffer  = Math.max(0, CAPACITY_DEFAULT_SP - committed);
+  });
+
+  CAPACITY_EPIC_KEYS = topEpics;
 
   CAPACITY_PAGE = 0;
   renderCapacityPage();
@@ -2439,7 +2559,14 @@ function renderCapacityPage() {
         legend: {
           display: true, position: 'top',
           labels: { font: { size: 10 }, boxWidth: 10, padding: 6,
-            filter: function(item) { return item.text !== 'Buffer' || page.some(function(e){ return e.buffer > 0; }); }
+            filter: function(item) { return item.text !== 'Buffer' || page.some(function(e){ return e.buffer > 0; }); },
+            generateLabels: function(chart) {
+              return Chart.defaults.plugins.legend.labels.generateLabels(chart).map(function(item) {
+                var max = 28;
+                item.text = item.text.length > max ? item.text.slice(0, max) + '…' : item.text;
+                return item;
+              });
+            }
           }
         },
         tooltip: {
@@ -3170,6 +3297,82 @@ function exportCSV() {
   a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
   a.download = 'content-org-sprint-' + new Date().toISOString().slice(0,10) + '.csv';
   a.click();
+}
+
+// ─── Mobile filter drawer ──────────────────────────────────────────────────────
+
+function openFilterDrawer() {
+  // Sync drawer selects from canonical selects before opening
+  syncDrawerFromMain();
+  document.getElementById('filter-drawer').classList.add('open');
+  document.getElementById('filter-drawer-overlay').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeFilterDrawer() {
+  document.getElementById('filter-drawer').classList.remove('open');
+  document.getElementById('filter-drawer-overlay').classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+function syncDrawerFromMain() {
+  var pairs = [
+    ['f-status','fd-status'],['f-period','fd-period'],
+    ['f-sprint-sel','fd-sprint-sel'],['f-em','fd-em'],['f-board','fd-board']
+  ];
+  pairs.forEach(function(p) {
+    var main = document.getElementById(p[0]);
+    var draw = document.getElementById(p[1]);
+    if (!main || !draw) return;
+    // Copy options if drawer is empty or stale
+    if (draw.options.length !== main.options.length) {
+      draw.innerHTML = main.innerHTML;
+    }
+    draw.value = main.value;
+  });
+}
+
+function syncDrawerFilter(mainId, drawerId) {
+  var main = document.getElementById(mainId);
+  var draw = document.getElementById(drawerId);
+  if (main && draw) main.value = draw.value;
+  updateMobFilterBadge();
+}
+
+function updateMobFilterBadge() {
+  var btn = document.getElementById('mob-filter-btn');
+  var cnt = document.getElementById('mob-filter-count');
+  var active = [
+    document.getElementById('f-status'),
+    document.getElementById('f-em'),
+    document.getElementById('f-board'),
+    document.getElementById('f-sprint-sel'),
+    document.getElementById('f-period'),
+  ].filter(function(el){ return el && el.value; }).length;
+
+  if (btn) btn.classList.toggle('has-filters', active > 0);
+  if (cnt) {
+    cnt.style.display = active > 0 ? 'inline' : 'none';
+    cnt.textContent = active;
+  }
+  var lbl = document.getElementById('mob-active-label');
+  if (lbl) lbl.textContent = active > 0 ? active + ' active' : '';
+}
+
+// Keep drawer selects in sync when main selects are rebuilt (e.g. after period change)
+function syncMainToDrawer() {
+  var pairs = [
+    ['f-sprint-sel','fd-sprint-sel'],['f-em','fd-em'],['f-board','fd-board'],
+    ['f-status','fd-status'],['f-period','fd-period']
+  ];
+  pairs.forEach(function(p) {
+    var main = document.getElementById(p[0]);
+    var draw = document.getElementById(p[1]);
+    if (!main || !draw) return;
+    draw.innerHTML = main.innerHTML;
+    draw.value = main.value;
+  });
+  updateMobFilterBadge();
 }
 </script>
 </body>
