@@ -128,9 +128,48 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-s
 
 /* Mobile filter drawer */
 .mob-filter-btn{display:none;}
+/* Always-present drawer styles (positioning/transition work regardless of breakpoint) */
+.filter-drawer{
+  position:fixed;bottom:0;left:0;right:0;z-index:200;
+  background:var(--surface);border-top:1px solid var(--border);
+  border-radius:16px 16px 0 0;
+  padding:0 20px 32px;
+  box-shadow:0 -4px 24px rgba(0,0,0,.12);
+  transform:translateY(100%);transition:transform .28s cubic-bezier(.4,0,.2,1);
+  max-height:85vh;overflow-y:auto;
+}
+.filter-drawer.open{transform:translateY(0);}
+.filter-drawer-handle{
+  width:36px;height:4px;background:var(--border2);border-radius:2px;
+  margin:10px auto 16px;
+}
+.filter-drawer-title{
+  font-size:13px;font-weight:700;color:var(--text);
+  margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;
+}
+.filter-drawer-footer{display:flex;gap:10px;margin-top:16px;}
+.filter-drawer-footer .btn-clear-filters{flex:1;justify-content:center;padding:10px;font-size:12px;}
+.filter-drawer-close{
+  background:var(--accent);color:#fff;border:none;border-radius:8px;
+  flex:1;padding:10px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;
+}
+.filter-drawer-overlay{
+  display:none;position:fixed;inset:0;z-index:199;background:rgba(0,0,0,.3);
+}
+.filter-drawer-overlay.open{display:block;}
+/* Drawer-mode filter groups (active when bank is inside drawer) */
+.filter-bank-in-drawer .filter-group{
+  display:flex;flex-direction:column;align-items:flex-start;
+  border:none;padding:10px 0;border-bottom:1px solid var(--border);
+  gap:6px;width:100%;border-right:none;
+}
+.filter-bank-in-drawer .filter-group:last-child{border-bottom:none;}
+.filter-bank-in-drawer .filter-group select{width:100%;font-size:14px;padding:8px 30px 8px 12px;}
+.filter-bank-in-drawer .filter-group label{font-size:11px;}
+#filter-clear-group{display:none;}
+.filter-bank-in-drawer #filter-clear-group{display:none !important;}
 @media(max-width:700px){
   .toolbar{padding:0 12px;}
-  .toolbar-filters{display:none;}
   .mob-filter-btn{
     display:inline-flex;align-items:center;gap:6px;
     padding:6px 14px;margin:6px 0;border-radius:8px;
@@ -138,44 +177,6 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-s
     font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;flex-shrink:0;
   }
   .mob-filter-btn.has-filters{border-color:var(--accent);color:var(--accent);background:var(--accent-bg);}
-  .filter-drawer{
-    position:fixed;bottom:0;left:0;right:0;z-index:200;
-    background:var(--surface);border-top:1px solid var(--border);
-    border-radius:16px 16px 0 0;
-    padding:0 20px 32px;
-    box-shadow:0 -4px 24px rgba(0,0,0,.12);
-    transform:translateY(100%);transition:transform .28s cubic-bezier(.4,0,.2,1);
-    max-height:85vh;overflow-y:auto;
-  }
-  .filter-drawer.open{transform:translateY(0);}
-  .filter-drawer-handle{
-    width:36px;height:4px;background:var(--border2);border-radius:2px;
-    margin:10px auto 16px;
-  }
-  .filter-drawer-title{
-    font-size:13px;font-weight:700;color:var(--text);
-    margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;
-  }
-  .filter-drawer .filter-group{
-    display:flex;flex-direction:column;align-items:flex-start;
-    border:none;padding:10px 0;border-bottom:1px solid var(--border);
-    gap:6px;width:100%;
-  }
-  .filter-drawer .filter-group:last-child{border-bottom:none;}
-  .filter-drawer .filter-group select{width:100%;font-size:14px;padding:8px 30px 8px 12px;}
-  .filter-drawer .filter-group label{font-size:11px;}
-  .filter-drawer-footer{
-    display:flex;gap:10px;margin-top:16px;
-  }
-  .filter-drawer-footer .btn-clear-filters{flex:1;justify-content:center;padding:10px;font-size:12px;}
-  .filter-drawer-close{
-    background:var(--accent);color:#fff;border:none;border-radius:8px;
-    flex:1;padding:10px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;
-  }
-  .filter-drawer-overlay{
-    display:none;position:fixed;inset:0;z-index:199;background:rgba(0,0,0,.3);
-  }
-  .filter-drawer-overlay.open{display:block;}
   .content{padding:14px 12px;}
 }
 
@@ -491,36 +492,8 @@ tr.ticket-col-hdr.hidden{display:none;}
     Filters <span id="mob-filter-count" style="display:none;background:var(--accent);color:#fff;border-radius:10px;padding:1px 6px;font-size:10px;"></span>
   </button>
 
-  <!-- Desktop filters (hidden on mobile via .toolbar-filters) -->
-  <div class="toolbar-filters" style="display:contents;">
-    <div class="filter-group">
-      <label>Status</label>
-      <select id="f-status" onchange="onStatusChange()"></select>
-    </div>
-    <div class="filter-group">
-      <label>Period</label>
-      <select id="f-period" onchange="onPeriodChange()"></select>
-    </div>
-    <div class="filter-group">
-      <label>Sprints</label>
-      <select id="f-sprint-sel" onchange="onSprintSelChange()" style="max-width:180px;"></select>
-    </div>
-    <!-- backing fields read by filter/chart logic — hidden -->
-    <input id="f-fy" type="hidden" value="">
-    <input id="f-q"  type="hidden" value="">
-    <input id="f-sprint" type="hidden" value="">
-    <div class="filter-group">
-      <label>EM</label>
-      <select id="f-em" onchange="onEmChange()"></select>
-    </div>
-    <div class="filter-group">
-      <label>Board</label>
-      <select id="f-board" onchange="onBoardChange()"></select>
-    </div>
-    <div class="filter-group" style="border-right:none;">
-      <button class="btn-clear-filters" id="btn-clear-filters" onclick="clearAllFilters()" title="Reset all filters">&#10005; Clear</button>
-    </div>
-  </div>
+  <!-- filter-bank is moved here (desktop) or into the drawer (mobile) by JS -->
+  <div id="filter-bank-slot" style="display:contents;"></div>
 
   <div style="margin-left:auto;display:flex;align-items:center;padding:0 0 0 12px;flex-shrink:0;">
     <div class="tabs-inline">
@@ -532,7 +505,38 @@ tr.ticket-col-hdr.hidden{display:none;}
   </div>
 </div>
 
-<!-- Mobile filter drawer -->
+<!-- Single filter bank — physically moved by JS between toolbar and drawer -->
+<div id="filter-bank" style="display:contents;">
+  <div class="filter-group">
+    <label>Status</label>
+    <select id="f-status" onchange="onStatusChange()"></select>
+  </div>
+  <div class="filter-group">
+    <label>Period</label>
+    <select id="f-period" onchange="onPeriodChange()"></select>
+  </div>
+  <div class="filter-group">
+    <label>Sprint</label>
+    <select id="f-sprint-sel" onchange="onSprintSelChange()" style="max-width:180px;"></select>
+  </div>
+  <!-- backing fields read by filter/chart logic — hidden -->
+  <input id="f-fy" type="hidden" value="">
+  <input id="f-q"  type="hidden" value="">
+  <input id="f-sprint" type="hidden" value="">
+  <div class="filter-group">
+    <label>EM</label>
+    <select id="f-em" onchange="onEmChange()"></select>
+  </div>
+  <div class="filter-group">
+    <label>Board</label>
+    <select id="f-board" onchange="onBoardChange()"></select>
+  </div>
+  <div class="filter-group" id="filter-clear-group" style="border-right:none;">
+    <button class="btn-clear-filters" id="btn-clear-filters" onclick="clearAllFilters()" title="Reset all filters">&#10005; Clear</button>
+  </div>
+</div>
+
+<!-- Mobile filter drawer shell (filter-bank moves inside when mobile) -->
 <div class="filter-drawer-overlay" id="filter-drawer-overlay" onclick="closeFilterDrawer()"></div>
 <div class="filter-drawer" id="filter-drawer">
   <div class="filter-drawer-handle"></div>
@@ -540,28 +544,9 @@ tr.ticket-col-hdr.hidden{display:none;}
     <span>Filters</span>
     <span id="mob-active-label" style="font-size:11px;color:var(--muted);font-weight:400;"></span>
   </div>
-  <div class="filter-group">
-    <label>Status</label>
-    <select id="fd-status" onchange="syncDrawerFilter('f-status','fd-status');onStatusChange();"></select>
-  </div>
-  <div class="filter-group">
-    <label>Period</label>
-    <select id="fd-period" onchange="syncDrawerFilter('f-period','fd-period');onPeriodChange();"></select>
-  </div>
-  <div class="filter-group">
-    <label>Sprint</label>
-    <select id="fd-sprint-sel" onchange="syncDrawerFilter('f-sprint-sel','fd-sprint-sel');onSprintSelChange();"></select>
-  </div>
-  <div class="filter-group">
-    <label>EM</label>
-    <select id="fd-em" onchange="syncDrawerFilter('f-em','fd-em');onEmChange();"></select>
-  </div>
-  <div class="filter-group">
-    <label>Board</label>
-    <select id="fd-board" onchange="syncDrawerFilter('f-board','fd-board');onBoardChange();"></select>
-  </div>
+  <div id="filter-drawer-body"></div>
   <div class="filter-drawer-footer">
-    <button class="btn-clear-filters" onclick="clearAllFilters();closeFilterDrawer();">&#10005; Clear all</button>
+    <button class="btn-clear-filters" onclick="clearAllFilters();">&#10005; Clear all</button>
     <button class="filter-drawer-close" onclick="closeFilterDrawer()">Done</button>
   </div>
 </div>
@@ -1537,6 +1522,7 @@ function startCountdown() {
 }
 
 window.addEventListener('DOMContentLoaded', function() {
+  placeFilterBank();
   initBanner();
   computeBacklogSprints();
   refreshAllFilters();
@@ -3299,44 +3285,50 @@ function exportCSV() {
   a.click();
 }
 
-// ─── Mobile filter drawer ──────────────────────────────────────────────────────
+// ─── Mobile filter drawer — single DOM node approach ─────────────────────────
+// The #filter-bank element is physically moved: into #filter-bank-slot (desktop)
+// or into #filter-drawer-body (mobile). No duplicate selects ever exist.
+
+var _filterBankInDrawer = false;
+
+function _isMobile() { return window.innerWidth <= 700; }
+
+function placeFilterBank() {
+  var bank   = document.getElementById('filter-bank');
+  var slot   = document.getElementById('filter-bank-slot');
+  var dbody  = document.getElementById('filter-drawer-body');
+  if (!bank || !slot || !dbody) return;
+  var mobile = _isMobile();
+  if (mobile && !_filterBankInDrawer) {
+    bank.style.display = 'block';
+    bank.classList.add('filter-bank-in-drawer');
+    dbody.appendChild(bank);
+    _filterBankInDrawer = true;
+  } else if (!mobile && _filterBankInDrawer) {
+    bank.style.display = 'contents';
+    bank.classList.remove('filter-bank-in-drawer');
+    slot.appendChild(bank);
+    _filterBankInDrawer = false;
+  } else if (!mobile && !_filterBankInDrawer && !slot.contains(bank)) {
+    bank.style.display = 'contents';
+    slot.appendChild(bank);
+  }
+  // Show/hide the clear button: visible in toolbar, hidden inside drawer
+  var clearGrp = document.getElementById('filter-clear-group');
+  if (clearGrp) clearGrp.style.display = mobile ? 'none' : 'flex';
+}
 
 function openFilterDrawer() {
-  // Sync drawer selects from canonical selects before opening
-  syncDrawerFromMain();
   document.getElementById('filter-drawer').classList.add('open');
   document.getElementById('filter-drawer-overlay').classList.add('open');
   document.body.style.overflow = 'hidden';
+  updateMobFilterBadge();
 }
 
 function closeFilterDrawer() {
   document.getElementById('filter-drawer').classList.remove('open');
   document.getElementById('filter-drawer-overlay').classList.remove('open');
   document.body.style.overflow = '';
-}
-
-function syncDrawerFromMain() {
-  var pairs = [
-    ['f-status','fd-status'],['f-period','fd-period'],
-    ['f-sprint-sel','fd-sprint-sel'],['f-em','fd-em'],['f-board','fd-board']
-  ];
-  pairs.forEach(function(p) {
-    var main = document.getElementById(p[0]);
-    var draw = document.getElementById(p[1]);
-    if (!main || !draw) return;
-    // Copy options if drawer is empty or stale
-    if (draw.options.length !== main.options.length) {
-      draw.innerHTML = main.innerHTML;
-    }
-    draw.value = main.value;
-  });
-}
-
-function syncDrawerFilter(mainId, drawerId) {
-  var main = document.getElementById(mainId);
-  var draw = document.getElementById(drawerId);
-  if (main && draw) main.value = draw.value;
-  updateMobFilterBadge();
 }
 
 function updateMobFilterBadge() {
@@ -3349,31 +3341,17 @@ function updateMobFilterBadge() {
     document.getElementById('f-sprint-sel'),
     document.getElementById('f-period'),
   ].filter(function(el){ return el && el.value; }).length;
-
   if (btn) btn.classList.toggle('has-filters', active > 0);
-  if (cnt) {
-    cnt.style.display = active > 0 ? 'inline' : 'none';
-    cnt.textContent = active;
-  }
+  if (cnt) { cnt.style.display = active > 0 ? 'inline' : 'none'; cnt.textContent = active; }
   var lbl = document.getElementById('mob-active-label');
   if (lbl) lbl.textContent = active > 0 ? active + ' active' : '';
 }
 
-// Keep drawer selects in sync when main selects are rebuilt (e.g. after period change)
-function syncMainToDrawer() {
-  var pairs = [
-    ['f-sprint-sel','fd-sprint-sel'],['f-em','fd-em'],['f-board','fd-board'],
-    ['f-status','fd-status'],['f-period','fd-period']
-  ];
-  pairs.forEach(function(p) {
-    var main = document.getElementById(p[0]);
-    var draw = document.getElementById(p[1]);
-    if (!main || !draw) return;
-    draw.innerHTML = main.innerHTML;
-    draw.value = main.value;
-  });
-  updateMobFilterBadge();
-}
+// Called by updateClearButton after any filter change
+function syncMainToDrawer() { updateMobFilterBadge(); }
+
+// Place bank on load and on resize
+window.addEventListener('resize', function() { placeFilterBank(); }, { passive: true });
 </script>
 </body>
 </html>
