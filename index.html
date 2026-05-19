@@ -1495,13 +1495,16 @@ function startCountdown() {
   function nextSyncTime() {
     var candidate = new Date();
     candidate.setUTCSeconds(0, 0);
-    candidate.setUTCMinutes(0);
-    candidate.setUTCHours(candidate.getUTCHours() + 1);
+    // Round up to next 15-min slot (cron: */15)
+    var m = candidate.getUTCMinutes();
+    var nextM = Math.ceil((m + 1) / 15) * 15;
+    candidate.setUTCMinutes(nextM); // auto-carries hours if nextM >= 60
+    // Advance past non-working hours/days (Mon-Fri 14:00-23:00 UTC)
     for (var i = 0; i < 200; i++) {
       var h = candidate.getUTCHours();
       var dow = candidate.getUTCDay();
       if (dow >= 1 && dow <= 5 && h >= 14 && h <= 23) break;
-      candidate.setUTCHours(candidate.getUTCHours() + 1);
+      candidate.setUTCMinutes(candidate.getUTCMinutes() + 15);
     }
     return candidate;
   }
