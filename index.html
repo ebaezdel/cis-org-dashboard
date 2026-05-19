@@ -2241,12 +2241,12 @@ function renderVelocityChart(canvasId) {
   if (ctx) ctx.style.display = '';
 
   // Aggregate epicBreakdown across all visible sprint rows
-  var epicMap = {};  // epicKey → {label, issues, sp, done}
+  var epicMap = {};  // epicKey → {key, label, issues, sp, done}
   var hasData = false;
   source.forEach(function(r) {
     if (!r.epicBreakdown || !r.epicBreakdown.length) return;
     r.epicBreakdown.forEach(function(e) {
-      if (!epicMap[e.key]) epicMap[e.key] = {label: e.label || e.key, issues: 0, sp: 0, done: 0};
+      if (!epicMap[e.key]) epicMap[e.key] = {key: e.key, label: e.label || e.key, issues: 0, sp: 0, done: 0};
       epicMap[e.key].issues += (e.issues || 0);
       epicMap[e.key].sp     += (e.sp     || 0);
       epicMap[e.key].done   += (e.done   || 0);
@@ -2276,6 +2276,15 @@ function renderVelocityChart(canvasId) {
   var PALETTE = CAP_PALETTE;
   var bgColors  = PALETTE.slice(0, epics.length);
   var total = spArr.reduce(function(s,v){ return s+v; }, 0);
+
+  // Populate shared epic→color and epic→key maps for capacity cards
+  EPIC_COLOR_MAP = {};
+  EPIC_KEY_MAP   = {};
+  epics.forEach(function(e, i) {
+    var lbl = e.label.slice(0, 40);
+    EPIC_COLOR_MAP[lbl] = bgColors[i];
+    if (e.key) EPIC_KEY_MAP[lbl] = e.key;
+  });
 
   // Remove old custom legend if re-rendering
   var oldLegend = wrap ? wrap.querySelector('.epic-legend') : null;
@@ -2330,9 +2339,12 @@ function renderVelocityChart(canvasId) {
     var pct = total > 0 ? Math.round(spArr[i] / total * 100) : 0;
     var row = document.createElement('div');
     row.style.cssText = 'display:flex;align-items:baseline;gap:7px;font-size:11px;line-height:1.4;';
+    var keyHtml = e.key
+      ? '<a href="https://moveinc.atlassian.net/browse/' + e.key + '" target="_blank" style="font-family:monospace;font-size:10px;color:var(--accent);text-decoration:none;flex-shrink:0;">' + e.key + '</a> '
+      : '';
     row.innerHTML =
       '<span style="flex:0 0 10px;height:10px;border-radius:2px;background:' + bgColors[i] + ';display:inline-block;margin-top:2px;"></span>' +
-      '<span style="flex:1;min-width:0;color:var(--text);word-break:break-word;">' + e.label + '</span>' +
+      '<span style="flex:1;min-width:0;color:var(--text);word-break:break-word;">' + keyHtml + e.label + '</span>' +
       '<span style="flex:0 0 auto;color:var(--muted);font-weight:600;white-space:nowrap;">' + pct + '%</span>';
     legend.appendChild(row);
   });
@@ -2414,6 +2426,9 @@ function renderEffortChart() {
 
 var CAPACITY_DEFAULT_SP = 10;
 var CAP_PALETTE = ['#5b5bd6','#3b82f6','#16a34a','#d97706','#dc2626','#7c3aed','#0891b2','#65a30d','#c2410c','#9333ea'];
+// Populated by renderEpicChart() so capacity cards use the same colors
+var EPIC_COLOR_MAP = {};  // label → color
+var EPIC_KEY_MAP   = {};  // label → jiraKey
 
 function renderCapacityChart() {
   var el = document.getElementById('capacity-cards');
@@ -2443,10 +2458,13 @@ function renderCapacityChart() {
   });
 
   // Aggregate SP per dev per epic from epicBreakdown tickets
-  var devEpicSP = {};
+  // Also capture jiraKey per label for linking
+  var devEpicSP  = {};
+  var epicKeyFor = {};  // label → jiraKey (from epicBreakdown)
   source.forEach(function(d) {
     (d.epicBreakdown || []).forEach(function(epic) {
       var label = (epic.label || epic.key || 'Other').slice(0, 40);
+      if (epic.key) epicKeyFor[label] = epic.key;
       (epic.tickets || []).forEach(function(t) {
         var name = t.assignee || 'Unassigned';
         var sp   = t.sp || 0;
@@ -2481,7 +2499,7 @@ function renderCapacityChart() {
     var barClass = pct >= 90 ? 'cap-bar-fill-red' : pct >= 70 ? 'cap-bar-fill-yellow' : 'cap-bar-fill-green';
     var displayName = name.length > 22 ? name.slice(0, 21) + '…' : name;
 
-    // Epic breakdown bar
+    // Epic breakdown bar — use shared EPIC_COLOR_MAP so colors match the pie chart
     var epicEntries = Object.entries(devEpicSP[name] || {}).sort(function(a,b){ return b[1]-a[1]; });
     var epicBarHtml = '';
     var legendHtml  = '';
@@ -2490,17 +2508,27 @@ function renderCapacityChart() {
       var top  = epicEntries.slice(0, 5);
       var rest = epicEntries.slice(5);
       if (rest.length) top.push(['Other', rest.reduce(function(s,e){ return s+e[1]; }, 0)]);
+      // Assign colors: prefer shared map (matches pie), fall back to palette by local index
+      var colorFor = function(lbl, idx) {
+        return EPIC_COLOR_MAP[lbl] || CAP_PALETTE[idx % CAP_PALETTE.length];
+      };
       var segs = top.map(function(e, i) {
-        var color = CAP_PALETTE[i % CAP_PALETTE.length];
+        var color = colorFor(e[0], i);
         var flex  = totalEpicSP > 0 ? (e[1] / totalEpicSP * 100).toFixed(1) : 0;
-        var safeTitle = (e[0] + ': ' + e[1] + ' SP').replace(/"/g, '&quot;');
+        var jiraKey = epicKeyFor[e[0]] || EPIC_KEY_MAP[e[0]] || '';
+        var tipText = (jiraKey ? jiraKey + ' — ' : '') + e[0] + ': ' + e[1] + ' SP';
+        var safeTitle = tipText.replace(/"/g, '&quot;');
         return '<div style="flex:' + flex + ';background:' + color + ';height:100%;min-width:3px;" title="' + safeTitle + '"></div>';
       }).join('');
       epicBarHtml = '<div class="cap-epic-bar">' + segs + '</div>';
       var legendItems = top.slice(0, 3).map(function(e, i) {
-        var color = CAP_PALETTE[i % CAP_PALETTE.length];
-        var lbl   = e[0].length > 16 ? e[0].slice(0, 15) + '…' : e[0];
-        return '<span class="cap-epic-legend-item"><span class="cap-epic-dot" style="background:' + color + '"></span>' + lbl + '</span>';
+        var color   = colorFor(e[0], i);
+        var jiraKey = epicKeyFor[e[0]] || EPIC_KEY_MAP[e[0]] || '';
+        var keyHtml = jiraKey
+          ? '<a href="https://moveinc.atlassian.net/browse/' + jiraKey + '" target="_blank" style="font-family:monospace;font-size:8px;color:var(--accent);text-decoration:none;">' + jiraKey + '</a> '
+          : '';
+        var lbl = e[0].length > 16 ? e[0].slice(0, 15) + '…' : e[0];
+        return '<span class="cap-epic-legend-item"><span class="cap-epic-dot" style="background:' + color + '"></span>' + keyHtml + lbl + '</span>';
       });
       if (top.length > 3) legendItems.push('<span class="cap-epic-legend-item cap-epic-legend-more">+' + (top.length - 3) + ' more</span>');
       legendHtml = '<div class="cap-epic-legend">' + legendItems.join('') + '</div>';
