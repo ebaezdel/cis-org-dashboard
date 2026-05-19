@@ -1,7 +1,10 @@
 name: Jira Sync
 
 on:
-  workflow_dispatch:  # triggered by cron-job.org every 15 min via GitHub API
+  schedule:
+    - cron: '*/15 12-23 * * 1-5'  # Mon-Fri morning/afternoon: 6am-5:59pm CST (7am-6:59pm CDT)
+    - cron: '*/15 0-3 * * 2-6'    # Mon-Fri evening: 6pm-9:59pm CST — crosses midnight UTC so days shift +1
+  workflow_dispatch:
 
 jobs:
   sync:
