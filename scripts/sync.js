@@ -63,12 +63,12 @@ function jiraGet(urlPath) {
   });
 }
 
-async function fetchActiveIssues(board) {
+async function fetchIssues(board, sprintClause) {
   const fields = [
     'summary', 'status', 'assignee', 'issuetype', 'labels',
     'customfield_10034', 'customfield_10016', 'parent',
   ].join(',');
-  const jql = encodeURIComponent(`project = ${board} AND sprint in openSprints() ORDER BY created ASC`);
+  const jql = encodeURIComponent(`project = ${board} AND sprint in ${sprintClause} ORDER BY created ASC`);
 
   let issues = [];
   let nextPageToken;
@@ -217,7 +217,7 @@ const METRICS_RE = /, issues:\d+(?:\.\d+)?, totalSP:\d+(?:\.\d+)?, doneSP:\d+(?:
 // Uses a non-greedy match inside brackets; works because each row is a single line.
 const PAYLOAD_RE = /, epicBreakdown:\[.*\], effortBreakdown:\{[^}]*\}(?:, _hasStatusBreakdown:true)?, ticketsPerDev:\[.*\](?=\})/;
 
-function patchHTML(html, board, m, epicBreakdown, effortBreakdown, ticketsPerDev) {
+function patchHTML(html, board, sprintStatus, m, epicBreakdown, effortBreakdown, ticketsPerDev) {
   const metricsRepl  = `, issues:${m.issues}, totalSP:${m.totalSP}, doneSP:${m.doneSP}, pendingSP:${m.pendingSP}, inProgressSP:${m.inProgressSP}, committedSP:${m.committedSP}, spRes:${m.spRes}, velocity:${m.velocity}`;
   const payloadRepl  = `, epicBreakdown:${serializeEpicBreakdown(epicBreakdown)}, effortBreakdown:${serializeObj(effortBreakdown)}, _hasStatusBreakdown:true, ticketsPerDev:${serializeTicketsPerDev(ticketsPerDev)}`;
 
@@ -225,14 +225,14 @@ function patchHTML(html, board, m, epicBreakdown, effortBreakdown, ticketsPerDev
   let found = false;
 
   const result = lines.map(line => {
-    if (!line.includes(`board:'${board}'`) || !line.includes(`sprintStatus:'active'`)) return line;
+    if (!line.includes(`board:'${board}'`) || !line.includes(`sprintStatus:'${sprintStatus}'`)) return line;
     let updated = line.replace(METRICS_RE, metricsRepl);
     updated = updated.replace(PAYLOAD_RE, payloadRepl);
     if (updated !== line) found = true;
     return updated;
   });
 
-  if (!found) process.stderr.write(`[WARN] No active sprint row patched for ${board}\n`);
+  if (!found) process.stderr.write(`[WARN] No ${sprintStatus} sprint row patched for ${board}\n`);
   return result.join('\n');
 }
 
@@ -249,15 +249,31 @@ async function main() {
   let html = fs.readFileSync(HTML_PATH, 'utf8');
 
   for (const { board } of BOARDS) {
-    process.stdout.write(`  [${board.padEnd(6)}] fetching... `);
+    // Active sprint
+    process.stdout.write(`  [${board.padEnd(6)}] active... `);
     try {
-      const issues         = await fetchActiveIssues(board);
-      const metrics        = calcMetrics(issues);
-      const epicBreakdown  = buildEpicBreakdown(issues);
+      const issues          = await fetchIssues(board, 'openSprints()');
+      const metrics         = calcMetrics(issues);
+      const epicBreakdown   = buildEpicBreakdown(issues);
       const effortBreakdown = buildEffortBreakdown(issues);
-      const ticketsPerDev  = buildTicketsPerDev(issues);
-      html = patchHTML(html, board, metrics, epicBreakdown, effortBreakdown, ticketsPerDev);
+      const ticketsPerDev   = buildTicketsPerDev(issues);
+      html = patchHTML(html, board, 'active', metrics, epicBreakdown, effortBreakdown, ticketsPerDev);
       console.log(`${String(issues.length).padStart(3)} issues — totalSP:${metrics.totalSP}  doneSP:${metrics.doneSP}  (${metrics.spRes}%)`);
+    } catch (err) {
+      console.log(`FAILED — ${err.message}`);
+    }
+
+    // Future sprint
+    process.stdout.write(`  [${board.padEnd(6)}] future... `);
+    try {
+      const issues          = await fetchIssues(board, 'futureSprints()');
+      if (!issues.length) { console.log('  (no future sprint)'); continue; }
+      const metrics         = calcMetrics(issues);
+      const epicBreakdown   = buildEpicBreakdown(issues);
+      const effortBreakdown = buildEffortBreakdown(issues);
+      const ticketsPerDev   = buildTicketsPerDev(issues);
+      html = patchHTML(html, board, 'future', metrics, epicBreakdown, effortBreakdown, ticketsPerDev);
+      console.log(`${String(issues.length).padStart(3)} issues — totalSP:${metrics.totalSP}  (future)`);
     } catch (err) {
       console.log(`FAILED — ${err.message}`);
     }
