@@ -1,0 +1,11 @@
+{
+  "name": "content-org-dashboard",
+  "version": "1.0.0",
+  "description": "Content Org Sprint Health Dashboard",
+  "scripts": {
+    "sync": "node scripts/sync.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
