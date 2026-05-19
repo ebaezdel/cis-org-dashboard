@@ -1730,8 +1730,29 @@ function applyFilters() {
   });
 
   updateClearButton();
+  updateBoardHealthHeading();
   RENDERED = {};
   renderTab(CURRENT_TAB);
+}
+
+function updateBoardHealthHeading() {
+  var el = document.getElementById('board-health-heading');
+  if (!el) return;
+  var parts = [];
+  var fy     = document.getElementById('f-fy').value;
+  var q      = document.getElementById('f-q').value;
+  var sprint = document.getElementById('f-sprint').value;
+  var em     = document.getElementById('f-em').value;
+  var board  = document.getElementById('f-board').value;
+  var status = document.getElementById('f-status').value;
+  if (fy)     parts.push(fy);
+  if (q)      parts.push(q);
+  if (sprint) parts.push('S' + sprint);
+  if (em)     parts.push(em);
+  if (board)  parts.push(board);
+  if (status) parts.push(status.charAt(0).toUpperCase() + status.slice(1));
+  var suffix = parts.length ? parts.join(' · ') : 'All';
+  el.textContent = 'Board Health — ' + suffix;
 }
 
 function updateClearButton() {
