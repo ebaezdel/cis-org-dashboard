@@ -2271,7 +2271,7 @@ function renderSHDTable() {
             // Ticket rows per epic
             (epic.tickets || []).forEach(function(t, ti) {
               var sc = t.status === 'Done' ? 'ts-done'
-                     : t.status === 'In Progress' ? 'ts-inprogress'
+                     : (t.status === 'In Progress' || t.status === 'Test Complete') ? 'ts-inprogress'
                      : (t.status === 'Accepted' || t.status === 'Acceptance') ? 'ts-accepted'
                      : (t.status === 'Development Complete' || t.status === 'Dev Complete') ? 'ts-devcomplete'
                      : 'ts-todo';
