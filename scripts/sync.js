@@ -158,6 +158,9 @@ async function main() {
     }
   }
 
+  // Inject real sync timestamp so the browser reads it correctly (not document.lastModified)
+  html = html.replace(/id="data-banner"[^>]*/, `id="data-banner" data-synced-at="${new Date().toISOString()}"`);
+
   fs.writeFileSync(HTML_PATH, html, 'utf8');
   console.log('\nindex.html updated.');
 }

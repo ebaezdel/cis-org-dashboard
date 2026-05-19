@@ -1373,7 +1373,10 @@ var CURRENT_TAB = 'shd';
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
 function initBanner() {
-  var dt = new Date(document.lastModified);
+  var el = document.getElementById('data-banner');
+  if (!el) return;
+  var raw = el.getAttribute('data-synced-at') || document.lastModified;
+  var dt = new Date(raw);
   var formatted = dt.toLocaleDateString('en-US', {
     month: 'long', day: 'numeric', year: 'numeric',
     timeZone: 'America/Chicago'
@@ -1381,11 +1384,39 @@ function initBanner() {
     hour: 'numeric', minute: '2-digit', hour12: true,
     timeZone: 'America/Chicago'
   }) + ' CST';
-  var el = document.getElementById('data-banner');
-  if (el) {
-    el.innerHTML = 'Source: RDC-OS Jira MCP' +
-      ' &nbsp;&middot;&nbsp; Last updated: ' + formatted;
+  el.innerHTML = 'Source: RDC-OS Jira MCP &nbsp;&middot;&nbsp; Last updated: ' + formatted +
+    ' &nbsp;&middot;&nbsp; <span id="next-sync-label" style="color:var(--muted);"></span>';
+  startCountdown();
+}
+
+function startCountdown() {
+  function nextSyncTime() {
+    var candidate = new Date();
+    candidate.setUTCSeconds(0, 0);
+    candidate.setUTCMinutes(0);
+    candidate.setUTCHours(candidate.getUTCHours() + 1);
+    for (var i = 0; i < 200; i++) {
+      var h = candidate.getUTCHours();
+      var dow = candidate.getUTCDay();
+      if (dow >= 1 && dow <= 5 && h >= 14 && h <= 23) break;
+      candidate.setUTCHours(candidate.getUTCHours() + 1);
+    }
+    return candidate;
   }
+
+  function tick() {
+    var label = document.getElementById('next-sync-label');
+    if (!label) return;
+    var diffMs = nextSyncTime() - new Date();
+    if (diffMs <= 0) { label.textContent = 'syncing…'; return; }
+    var diffSec = Math.floor(diffMs / 1000);
+    label.textContent = diffSec <= 60
+      ? 'next sync in ' + diffSec + 's'
+      : 'next sync in ' + Math.floor(diffSec / 60) + 'm';
+  }
+
+  tick();
+  setInterval(tick, 1000);
 }
 
 window.addEventListener('DOMContentLoaded', function() {
