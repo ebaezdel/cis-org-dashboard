@@ -2295,58 +2295,102 @@ function renderEffortChart() {
   if (wrap) wrap.appendChild(legend);
 }
 
-var CAPACITY_PAGE_SIZE = 8;
-var CAPACITY_PAGE      = 0;
-var CAPACITY_ENTRIES   = [];
+var CAPACITY_PAGE_SIZE    = 8;
+var CAPACITY_PAGE         = 0;
+var CAPACITY_ENTRIES      = [];  // [{name, totalSP, epics:{epicLabel:sp}, buffer}]
+var CAPACITY_EPIC_KEYS    = [];  // ordered epic label list for this render
+var CAPACITY_DEFAULT_SP   = 10; // assumed sprint capacity ceiling per person
+
+// Palette for epic segments — cycles if more epics than colors
+var CAP_EPIC_PALETTE = [
+  'rgba(59,130,246,0.82)',  // blue
+  'rgba(139,92,246,0.82)',  // purple
+  'rgba(20,184,166,0.82)',  // teal
+  'rgba(245,158,11,0.82)',  // amber
+  'rgba(239,68,68,0.82)',   // red
+  'rgba(34,197,94,0.82)',   // green
+  'rgba(249,115,22,0.82)',  // orange
+  'rgba(236,72,153,0.82)',  // pink
+];
 
 function renderCapacityChart() {
   var source = FILTERED.length ? FILTERED : ACTIVE_SPRINTS;
 
-  var devMap = {};
-  var totalIssues = 0;
-  var assignedIssues = 0;
+  // Build per-dev SP map keyed by epic label, sourced from epicBreakdown tickets
+  var devEpicSP   = {};  // devName -> {epicLabel: sp}
+  var devTotalSP  = {};  // devName -> total committed SP
+  var epicSet     = {};  // track all epic labels in order seen
 
   source.forEach(function(d) {
-    totalIssues += (d.issues || 0);
-    var perDev = d.ticketsPerDev || [];
-    perDev.forEach(function(entry) {
-      var name = entry.dev || 'Unassigned';
-      if (!devMap[name]) devMap[name] = { tickets: 0, sp: 0 };
-      devMap[name].tickets += entry.tickets || 0;
-      devMap[name].sp      += entry.sp      || 0;
-      assignedIssues += entry.tickets || 0;
+    (d.epicBreakdown || []).forEach(function(epic) {
+      var epicLabel = epic.label || 'Other';
+      (epic.tickets || []).forEach(function(t) {
+        var name = t.assignee || 'Unassigned';
+        var sp   = t.sp || 0;
+        if (!devEpicSP[name])  devEpicSP[name]  = {};
+        if (!devTotalSP[name]) devTotalSP[name] = 0;
+        devEpicSP[name][epicLabel] = (devEpicSP[name][epicLabel] || 0) + sp;
+        devTotalSP[name]          += sp;
+        epicSet[epicLabel] = true;
+      });
+    });
+
+    // Fallback: if no epicBreakdown, use ticketsPerDev with generic label
+    if (!(d.epicBreakdown || []).length) {
+      (d.ticketsPerDev || []).forEach(function(entry) {
+        var name = entry.dev || 'Unassigned';
+        var sp   = entry.sp || 0;
+        if (!devEpicSP[name])  devEpicSP[name]  = {};
+        if (!devTotalSP[name]) devTotalSP[name] = 0;
+        devEpicSP[name]['Committed'] = (devEpicSP[name]['Committed'] || 0) + sp;
+        devTotalSP[name]            += sp;
+        epicSet['Committed'] = true;
+      });
+    }
+  });
+
+  // Sort people: highest total SP first, Unassigned last
+  CAPACITY_ENTRIES = Object.keys(devTotalSP).sort(function(a, b) {
+    if (a === 'Unassigned') return 1;
+    if (b === 'Unassigned') return -1;
+    return devTotalSP[b] - devTotalSP[a];
+  }).map(function(name) {
+    var committed = devTotalSP[name];
+    var buffer    = Math.max(0, CAPACITY_DEFAULT_SP - committed);
+    return { name: name, totalSP: committed, epics: devEpicSP[name] || {}, buffer: buffer };
+  });
+
+  // Epic order: by total SP across all devs desc
+  var epicTotals = {};
+  Object.values(devEpicSP).forEach(function(epicMap) {
+    Object.entries(epicMap).forEach(function(kv) {
+      epicTotals[kv[0]] = (epicTotals[kv[0]] || 0) + kv[1];
     });
   });
-
-  var unassigned = Math.max(0, totalIssues - assignedIssues);
-  if (unassigned > 0) devMap['Unassigned'] = { tickets: unassigned, sp: 0 };
-
-  // Sort by SP desc, Unassigned always last
-  CAPACITY_ENTRIES = Object.entries(devMap).sort(function(a, b) {
-    if (a[0] === 'Unassigned') return 1;
-    if (b[0] === 'Unassigned') return -1;
-    return b[1].sp - a[1].sp;
+  CAPACITY_EPIC_KEYS = Object.keys(epicTotals).sort(function(a, b) {
+    return epicTotals[b] - epicTotals[a];
   });
+
   CAPACITY_PAGE = 0;
   renderCapacityPage();
 }
 
 function renderCapacityPage() {
-  var entries = CAPACITY_ENTRIES;
+  var entries    = CAPACITY_ENTRIES;
+  var epicKeys   = CAPACITY_EPIC_KEYS;
   var totalPages = Math.max(1, Math.ceil(entries.length / CAPACITY_PAGE_SIZE));
-  CAPACITY_PAGE = Math.min(Math.max(0, CAPACITY_PAGE), totalPages - 1);
+  CAPACITY_PAGE  = Math.min(Math.max(0, CAPACITY_PAGE), totalPages - 1);
 
   var wrap = document.getElementById('chart-capacity-wrap');
   if (!wrap) return;
 
   if (!entries.length) {
     wrap.innerHTML = '<canvas id="chart-capacity"></canvas><div style="color:var(--muted);font-size:11px;padding:8px 0;">No assignee data available</div>';
-    var pager = document.getElementById('chart-capacity-pager');
-    if (pager) pager.style.display = 'none';
+    var pager0 = document.getElementById('chart-capacity-pager');
+    if (pager0) pager0.style.display = 'none';
     return;
   }
 
-  // Rebuild canvas if needed
   if (!wrap.querySelector('canvas')) {
     wrap.innerHTML = '<canvas id="chart-capacity"></canvas>';
   }
@@ -2354,52 +2398,84 @@ function renderCapacityPage() {
   if (!ctx) return;
   destroyChart('chart-capacity');
 
-  var start  = CAPACITY_PAGE * CAPACITY_PAGE_SIZE;
-  var page   = entries.slice(start, start + CAPACITY_PAGE_SIZE);
+  var start = CAPACITY_PAGE * CAPACITY_PAGE_SIZE;
+  var page  = entries.slice(start, start + CAPACITY_PAGE_SIZE);
+  var names = page.map(function(e) { return e.name; });
 
-  var labels   = page.map(function(e) { return e[0]; });
-  var spData   = page.map(function(e) { return e[1].sp; });
-  var tkData   = page.map(function(e) { return e[1].tickets; });
-  var bgColors = labels.map(function(l) { return l === 'Unassigned' ? 'rgba(148,163,184,0.5)' : 'rgba(59,130,246,0.7)'; });
-  var tkColors = labels.map(function(l) { return l === 'Unassigned' ? 'rgba(148,163,184,0.3)' : 'rgba(99,102,241,0.5)'; });
+  // One dataset per epic + one for buffer
+  var datasets = epicKeys.map(function(epicLabel, i) {
+    var color = CAP_EPIC_PALETTE[i % CAP_EPIC_PALETTE.length];
+    return {
+      label: epicLabel,
+      data:  page.map(function(e) { return +(e.epics[epicLabel] || 0).toFixed(1); }),
+      backgroundColor: color,
+      borderRadius: 2,
+      borderSkipped: false,
+    };
+  });
 
-  var chartH = Math.max(180, page.length * 30);
+  // Buffer segment (gray, last)
+  datasets.push({
+    label: 'Buffer',
+    data:  page.map(function(e) { return +e.buffer.toFixed(1); }),
+    backgroundColor: 'rgba(203,213,225,0.45)',
+    borderRadius: 2,
+    borderSkipped: false,
+  });
+
+  var chartH = Math.max(180, page.length * 34);
   wrap.style.height = chartH + 'px';
   ctx.style.cssText = '';
 
   CHARTS['chart-capacity'] = new Chart(ctx, {
     type: 'bar',
-    data: {
-      labels: labels,
-      datasets: [
-        { label: 'SP',      data: spData, backgroundColor: bgColors, borderRadius: 3, borderSkipped: false, order: 1 },
-        { label: 'Tickets', data: tkData, backgroundColor: tkColors, borderRadius: 3, borderSkipped: false, order: 2, yAxisID: 'y2' }
-      ]
-    },
+    data: { labels: names, datasets: datasets },
     options: {
       indexAxis: 'y',
       responsive: true,
       maintainAspectRatio: false,
       interaction: { mode: 'index', intersect: false },
       plugins: {
-        legend: { display: true, position: 'top', labels: { font: { size: 10 }, boxWidth: 10, padding: 8 } },
-        tooltip: { callbacks: { label: function(item) { return ' ' + item.dataset.label + ': ' + item.raw; } } }
+        legend: {
+          display: true, position: 'top',
+          labels: { font: { size: 10 }, boxWidth: 10, padding: 6,
+            filter: function(item) { return item.text !== 'Buffer' || page.some(function(e){ return e.buffer > 0; }); }
+          }
+        },
+        tooltip: {
+          callbacks: {
+            title: function(items) {
+              var e = page[items[0].dataIndex];
+              return e.name + '  (' + e.totalSP.toFixed(1) + ' SP committed / ' + CAPACITY_DEFAULT_SP + ' cap)';
+            },
+            label: function(item) {
+              if (item.raw === 0) return null;
+              var pct = CAPACITY_DEFAULT_SP > 0 ? Math.round(item.raw / CAPACITY_DEFAULT_SP * 100) : 0;
+              return '  ' + item.dataset.label + ': ' + item.raw + ' SP  (' + pct + '%)';
+            }
+          }
+        }
       },
       scales: {
-        x:  { grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { font: { size: 10 } }, title: { display: true, text: 'Story Points', font: { size: 10 }, color: 'var(--muted)' } },
-        y:  { ticks: { font: { size: 10 } }, grid: { display: false } },
-        y2: { display: false, position: 'right' }
+        x: {
+          stacked: true,
+          max: CAPACITY_DEFAULT_SP,
+          grid: { color: 'rgba(0,0,0,0.05)' },
+          ticks: { font: { size: 10 } },
+          title: { display: true, text: 'Story Points  (cap: ' + CAPACITY_DEFAULT_SP + ' SP/person)', font: { size: 10 }, color: 'var(--muted)' }
+        },
+        y: { stacked: true, ticks: { font: { size: 10 } }, grid: { display: false } }
       }
     }
   });
 
-  // Update pager
+  // Pager
   var pager = document.getElementById('chart-capacity-pager');
   if (pager) {
     if (totalPages > 1) {
       pager.style.display = 'flex';
-      var label = document.getElementById('cap-page-label');
-      if (label) label.textContent = (CAPACITY_PAGE + 1) + ' / ' + totalPages + '  (' + entries.length + ' people)';
+      var lbl = document.getElementById('cap-page-label');
+      if (lbl) lbl.textContent = (CAPACITY_PAGE + 1) + ' / ' + totalPages + '  (' + entries.length + ' people)';
       var prev = document.getElementById('cap-prev');
       var next = document.getElementById('cap-next');
       if (prev) prev.style.visibility = CAPACITY_PAGE === 0 ? 'hidden' : 'visible';
@@ -2410,15 +2486,8 @@ function renderCapacityPage() {
   }
 }
 
-function capacityPagePrev() {
-  CAPACITY_PAGE--;
-  renderCapacityPage();
-}
-
-function capacityPageNext() {
-  CAPACITY_PAGE++;
-  renderCapacityPage();
-}
+function capacityPagePrev() { CAPACITY_PAGE--; renderCapacityPage(); }
+function capacityPageNext() { CAPACITY_PAGE++; renderCapacityPage(); }
 
 function renderSHDTable() {
   var tbody = document.getElementById('shd-tbody');
