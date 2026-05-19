@@ -321,32 +321,26 @@ async function main() {
       console.log(`FAILED — ${err.message}`);
     }
 
-    // Closed sprints — only patch rows that exist in index.html and lack epicBreakdown data
-    const closedRows = [...html.matchAll(new RegExp(`sprintName:'(${board}\\.[^']+)'[^}]+sprintStatus:'closed'[^}]+epicBreakdown:\\[\\]`, 'g'))]
-      .map(m => m[1]);
-    if (closedRows.length) {
-      process.stdout.write(`  [${board.padEnd(6)}] closed (${closedRows.length} missing)... `);
-      try {
-        const issues = await fetchIssues(board, 'closedSprints()');
-        if (!issues.length) { console.log('(no data)'); }
-        else {
-          const byName = groupBySprint(issues);
-          let count = 0;
-          for (const name of closedRows) {
-            if (!byName[name]) continue;
-            const sprintIssues    = byName[name];
-            const metrics         = calcMetrics(sprintIssues);
-            const epicBreakdown   = buildEpicBreakdown(sprintIssues);
-            const effortBreakdown = buildEffortBreakdown(sprintIssues);
-            const ticketsPerDev   = buildTicketsPerDev(sprintIssues);
-            html = patchHTMLBySprintName(html, name, metrics, epicBreakdown, effortBreakdown, ticketsPerDev);
-            count++;
-          }
-          console.log(`${count} rows updated`);
+    // Closed sprints — always sync so data stays current for all historical sprints
+    process.stdout.write(`  [${board.padEnd(6)}] closed... `);
+    try {
+      const issues = await fetchIssues(board, 'closedSprints()');
+      if (!issues.length) { console.log('(none)'); }
+      else {
+        const byName = groupBySprint(issues);
+        let count = 0;
+        for (const [name, sprintIssues] of Object.entries(byName)) {
+          const metrics         = calcMetrics(sprintIssues);
+          const epicBreakdown   = buildEpicBreakdown(sprintIssues);
+          const effortBreakdown = buildEffortBreakdown(sprintIssues);
+          const ticketsPerDev   = buildTicketsPerDev(sprintIssues);
+          html = patchHTMLBySprintName(html, name, metrics, epicBreakdown, effortBreakdown, ticketsPerDev);
+          count++;
         }
-      } catch (err) {
-        console.log(`FAILED — ${err.message}`);
+        console.log(`${count} closed sprints synced`);
       }
+    } catch (err) {
+      console.log(`FAILED — ${err.message}`);
     }
   }
 
