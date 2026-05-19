@@ -2218,12 +2218,14 @@ function renderVelocityChart(canvasId) {
   var ctx  = document.getElementById(canvasId);
   if (!ctx) return;
 
-  var boardVal  = (document.getElementById('f-board')  || {}).value || '';
-  var sprintVal = (document.getElementById('f-sprint') || {}).value || '';
+  var boardVal   = (document.getElementById('f-board')  || {}).value || '';
+  var sprintVal  = (document.getElementById('f-sprint') || {}).value || '';
+  var statusVal  = (document.getElementById('f-status') || {}).value || '';
+  var hasContext = (boardVal && sprintVal) || (boardVal && statusVal === 'active');
   var source = FILTERED.length ? FILTERED : ACTIVE_SPRINTS;
 
-  // Require both board AND specific sprint
-  if (!boardVal || !sprintVal) {
+  // Require board + sprint, or board + active status (active implies one sprint)
+  if (!hasContext) {
     if (ctx) ctx.style.display = 'none';
     var existing = wrap ? wrap.querySelector('.epic-empty') : null;
     if (!existing && wrap) {
@@ -2435,11 +2437,13 @@ function renderCapacityChart() {
   var el = document.getElementById('capacity-cards');
   if (!el) return;
 
-  var boardVal  = (document.getElementById('f-board')  || {}).value || '';
-  var sprintVal = (document.getElementById('f-sprint') || {}).value || '';
+  var boardVal   = (document.getElementById('f-board')  || {}).value || '';
+  var sprintVal  = (document.getElementById('f-sprint') || {}).value || '';
+  var statusVal  = (document.getElementById('f-status') || {}).value || '';
+  var hasContext = (boardVal && sprintVal) || (boardVal && statusVal === 'active');
 
-  // Require both board AND specific sprint
-  if (!boardVal || !sprintVal) {
+  // Require board + sprint, or board + active status (active implies one sprint)
+  if (!hasContext) {
     el.innerHTML =
       '<div class="cap-empty">' +
         '<div class="cap-empty-icon">&#128100;</div>' +

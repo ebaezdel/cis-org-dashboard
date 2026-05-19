@@ -186,6 +186,36 @@ test.describe('CIS Org Health Dashboard', () => {
     }
   });
 
+  test('capacity cards appear after selecting active status + board', async ({ page }) => {
+    // Active status implies one sprint per board — charts should render without a specific sprint
+    const statusSel = page.locator('#f-status');
+    await statusSel.selectOption('active');
+    await page.waitForTimeout(200);
+
+    const boardSel = page.locator('#f-board');
+    const boardOptions = await boardSel.locator('option').allInnerTexts();
+    const firstBoard = boardOptions.find(o => o.trim() && !/all/i.test(o));
+    expect(firstBoard).toBeTruthy();
+    await boardSel.selectOption({ label: firstBoard });
+    await page.waitForTimeout(400);
+
+    // Switch to Delivery tab
+    await page.click('text=Delivery');
+    await page.waitForFunction(() => {
+      const pane = document.getElementById('pane-dhd');
+      return pane && pane.classList.contains('active');
+    }, { timeout: 8_000 });
+
+    const result = await page.evaluate(() => {
+      const el = document.getElementById('capacity-cards');
+      if (!el) return { html: '', text: '' };
+      return { html: el.innerHTML, text: el.innerText };
+    });
+
+    // Must NOT show the empty state prompt
+    expect(result.text).not.toMatch(/Filter by.*board/i);
+  });
+
   // ─── Sync banner ─────────────────────────────────────────────────────────────
 
   test('sync banner exists and has a synced-at timestamp', async ({ page }) => {
