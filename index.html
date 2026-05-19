@@ -191,8 +191,7 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-s
 .bc-dates{font-size:9px;color:var(--muted2);margin-top:2px;letter-spacing:.2px;}
 
 /* Charts row */
-.charts-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:20px;}
-@media(max-width:1100px){.charts-row{grid-template-columns:1fr 1fr;}}
+.charts-row{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px;}
 @media(max-width:800px){.charts-row{grid-template-columns:1fr;}}
 .chart-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;overflow:hidden;}
 .chart-card h3{font-size:13px;font-weight:600;color:var(--text);margin-bottom:14px;display:flex;align-items:center;gap:8px;}
@@ -491,6 +490,10 @@ tr.ticket-col-hdr.hidden{display:none;}
     <div class="chart-card">
       <h3>Effort Mix <span class="sub">Issue breakdown by work type</span></h3>
       <div class="chart-wrap" id="chart-effort-wrap"><canvas id="chart-effort"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h3>Capacity by Assignee <span class="sub">SP &amp; tickets per person · active sprint(s)</span></h3>
+      <div class="chart-wrap" id="chart-capacity-wrap"><canvas id="chart-capacity"></canvas></div>
     </div>
   </div>
   <div class="section-heading">Sprint Data Table</div>
@@ -1836,6 +1839,7 @@ function renderSHD() {
   renderBurndownChart('chart-burndown');
   renderVelocityChart('chart-velocity');
   renderEffortChart();
+  renderCapacityChart();
   renderSHDTable();
 }
 
@@ -2284,6 +2288,90 @@ function renderEffortChart() {
     legend.appendChild(row);
   });
   if (wrap) wrap.appendChild(legend);
+}
+
+function renderCapacityChart() {
+  var source = FILTERED.length ? FILTERED : ACTIVE_SPRINTS;
+
+  // Aggregate SP and tickets per developer across all source rows
+  var devMap = {};
+  var totalIssues = 0;
+  var assignedIssues = 0;
+
+  source.forEach(function(d) {
+    totalIssues += (d.issues || 0);
+    var perDev = d.ticketsPerDev || [];
+    perDev.forEach(function(entry) {
+      var name = entry.dev || 'Unassigned';
+      if (!devMap[name]) devMap[name] = { tickets: 0, sp: 0 };
+      devMap[name].tickets += entry.tickets || 0;
+      devMap[name].sp      += entry.sp      || 0;
+      assignedIssues += entry.tickets || 0;
+    });
+  });
+
+  // Add unassigned bucket
+  var unassigned = Math.max(0, totalIssues - assignedIssues);
+  if (unassigned > 0) {
+    devMap['Unassigned'] = { tickets: unassigned, sp: 0 };
+  }
+
+  var ctx = document.getElementById('chart-capacity');
+  if (!ctx) return;
+  destroyChart('chart-capacity');
+
+  // Sort by SP desc, Unassigned last
+  var entries = Object.entries(devMap).sort(function(a, b) {
+    if (a[0] === 'Unassigned') return 1;
+    if (b[0] === 'Unassigned') return -1;
+    return b[1].sp - a[1].sp;
+  });
+
+  if (!entries.length) {
+    var wrap2 = document.getElementById('chart-capacity-wrap');
+    if (wrap2) wrap2.innerHTML = '<canvas id="chart-capacity"></canvas><div style="color:var(--muted);font-size:11px;padding:8px 0;">No assignee data available</div>';
+    return;
+  }
+
+  var labels = entries.map(function(e) { return e[0]; });
+  var spData = entries.map(function(e) { return e[1].sp; });
+  var tkData = entries.map(function(e) { return e[1].tickets; });
+  var bgColors = labels.map(function(l) { return l === 'Unassigned' ? 'rgba(148,163,184,0.5)' : 'rgba(59,130,246,0.7)'; });
+  var tkColors = labels.map(function(l) { return l === 'Unassigned' ? 'rgba(148,163,184,0.3)' : 'rgba(99,102,241,0.5)'; });
+
+  // Dynamic height: min 220px, 28px per person
+  var chartH = Math.max(220, entries.length * 28);
+  var wrap = document.getElementById('chart-capacity-wrap');
+  if (wrap) wrap.style.height = chartH + 'px';
+  ctx.style.cssText = '';
+
+  CHARTS['chart-capacity'] = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [
+        { label: 'SP', data: spData, backgroundColor: bgColors, borderRadius: 3, borderSkipped: false, order: 1 },
+        { label: 'Tickets', data: tkData, backgroundColor: tkColors, borderRadius: 3, borderSkipped: false, order: 2, yAxisID: 'y2' }
+      ]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: true, position: 'top', labels: { font: { size: 10 }, boxWidth: 10, padding: 8 } },
+        tooltip: { callbacks: { label: function(item) {
+          return ' ' + item.dataset.label + ': ' + item.raw;
+        }}}
+      },
+      scales: {
+        x:  { grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { font: { size: 10 } }, title: { display: true, text: 'Story Points', font: { size: 10 }, color: 'var(--muted)' } },
+        y:  { ticks: { font: { size: 10 } }, grid: { display: false } },
+        y2: { display: false, position: 'right' }
+      }
+    }
+  });
 }
 
 function renderSHDTable() {
