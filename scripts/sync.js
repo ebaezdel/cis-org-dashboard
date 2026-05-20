@@ -219,7 +219,9 @@ function serializeTicketsPerDev(arr) {
 
 // ─── HTML patcher ─────────────────────────────────────────────────────────────
 
-const METRICS_RE = /, issues:\d+(?:\.\d+)?, totalSP:\d+(?:\.\d+)?, doneSP:\d+(?:\.\d+)?, pendingSP:\d+(?:\.\d+)?, inProgressSP:\d+(?:\.\d+)?, committedSP:\d+(?:\.\d+)?, spRes:\d+, velocity:\d+/;
+// deltaSP may appear between committedSP and spRes in some rows — capture it so
+// it can be re-emitted unchanged in the replacement string.
+const METRICS_RE = /, issues:\d+(?:\.\d+)?, totalSP:\d+(?:\.\d+)?, doneSP:\d+(?:\.\d+)?, pendingSP:\d+(?:\.\d+)?, inProgressSP:\d+(?:\.\d+)?, committedSP:\d+(?:\.\d+)?(, deltaSP:[^,]+)?, spRes:\d+, velocity:\d+/;
 
 // Matches the entire epicBreakdown+effortBreakdown+ticketsPerDev block on one line.
 // Uses a non-greedy match inside brackets; works because each row is a single line.
@@ -248,7 +250,8 @@ function groupBySprint(issues, targetState) {
 }
 
 function patchHTMLBySprintName(html, sprintName, m, epicBreakdown, effortBreakdown, ticketsPerDev) {
-  const metricsRepl = `, issues:${m.issues}, totalSP:${m.totalSP}, doneSP:${m.doneSP}, pendingSP:${m.pendingSP}, inProgressSP:${m.inProgressSP}, committedSP:${m.committedSP}, spRes:${m.spRes}, velocity:${m.velocity}`;
+  // $1 re-emits the optional ", deltaSP:..." capture so it isn't lost
+  const metricsRepl = `, issues:${m.issues}, totalSP:${m.totalSP}, doneSP:${m.doneSP}, pendingSP:${m.pendingSP}, inProgressSP:${m.inProgressSP}, committedSP:${m.committedSP}$1, spRes:${m.spRes}, velocity:${m.velocity}`;
   const payloadRepl = `, epicBreakdown:${serializeEpicBreakdown(epicBreakdown)}, effortBreakdown:${serializeObj(effortBreakdown)}, _hasStatusBreakdown:true, ticketsPerDev:${serializeTicketsPerDev(ticketsPerDev)}`;
 
   const lines = html.split('\n');
@@ -267,7 +270,8 @@ function patchHTMLBySprintName(html, sprintName, m, epicBreakdown, effortBreakdo
 }
 
 function patchHTML(html, board, sprintStatus, m, epicBreakdown, effortBreakdown, ticketsPerDev) {
-  const metricsRepl  = `, issues:${m.issues}, totalSP:${m.totalSP}, doneSP:${m.doneSP}, pendingSP:${m.pendingSP}, inProgressSP:${m.inProgressSP}, committedSP:${m.committedSP}, spRes:${m.spRes}, velocity:${m.velocity}`;
+  // $1 re-emits the optional ", deltaSP:..." capture so it isn't lost
+  const metricsRepl  = `, issues:${m.issues}, totalSP:${m.totalSP}, doneSP:${m.doneSP}, pendingSP:${m.pendingSP}, inProgressSP:${m.inProgressSP}, committedSP:${m.committedSP}$1, spRes:${m.spRes}, velocity:${m.velocity}`;
   const payloadRepl  = `, epicBreakdown:${serializeEpicBreakdown(epicBreakdown)}, effortBreakdown:${serializeObj(effortBreakdown)}, _hasStatusBreakdown:true, ticketsPerDev:${serializeTicketsPerDev(ticketsPerDev)}`;
 
   const lines = html.split('\n');

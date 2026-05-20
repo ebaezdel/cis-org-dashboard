@@ -1565,9 +1565,23 @@ function startCountdown() {
   setInterval(tick, 1000);
 }
 
+// Recompute d.issues from epicBreakdown ticket arrays so the count reflects all
+// issue types (stories, spikes, bugs, tasks, sub-tasks) regardless of what the
+// METRICS_RE patch captured. epicBreakdown is always up-to-date after a sync.
+function recomputeIssueCounts() {
+  ALL_DATA.forEach(function(d) {
+    if (!d.epicBreakdown || !d.epicBreakdown.length) return;
+    var total = d.epicBreakdown.reduce(function(sum, epic) {
+      return sum + (epic.tickets ? epic.tickets.length : (epic.issues || 0));
+    }, 0);
+    if (total > 0) d.issues = total;
+  });
+}
+
 window.addEventListener('DOMContentLoaded', function() {
   placeFilterBank();
   initBanner();
+  recomputeIssueCounts();
   computeBacklogSprints();
   refreshAllFilters();
   computeBannerBuffer();
