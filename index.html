@@ -2292,15 +2292,28 @@ function renderVelocityChart(canvasId) {
   if (ctx) ctx.style.display = '';
 
   // Aggregate epicBreakdown across all visible sprint rows
+  var assigneeF = (document.getElementById('f-assignee') || {}).value || '';
   var epicMap = {};  // epicKey → {key, label, issues, sp, done}
   var hasData = false;
   source.forEach(function(r) {
     if (!r.epicBreakdown || !r.epicBreakdown.length) return;
     r.epicBreakdown.forEach(function(e) {
-      if (!epicMap[e.key]) epicMap[e.key] = {key: e.key, label: e.label || e.key, issues: 0, sp: 0, done: 0};
-      epicMap[e.key].issues += (e.issues || 0);
-      epicMap[e.key].sp     += (e.sp     || 0);
-      epicMap[e.key].done   += (e.done   || 0);
+      if (assigneeF) {
+        // When filtering by assignee, sum only that person's tickets SP
+        var myTickets = (e.tickets || []).filter(function(t){ return t.assignee === assigneeF; });
+        if (!myTickets.length) return;
+        var mySP   = myTickets.reduce(function(s, t){ return s + (t.sp || 0); }, 0);
+        var myDone = myTickets.filter(function(t){ return t.status === 'Done' || t.status === 'Accepted'; }).reduce(function(s, t){ return s + (t.sp || 0); }, 0);
+        if (!epicMap[e.key]) epicMap[e.key] = {key: e.key, label: e.label || e.key, issues: 0, sp: 0, done: 0};
+        epicMap[e.key].issues += myTickets.length;
+        epicMap[e.key].sp     += mySP;
+        epicMap[e.key].done   += myDone;
+      } else {
+        if (!epicMap[e.key]) epicMap[e.key] = {key: e.key, label: e.label || e.key, issues: 0, sp: 0, done: 0};
+        epicMap[e.key].issues += (e.issues || 0);
+        epicMap[e.key].sp     += (e.sp     || 0);
+        epicMap[e.key].done   += (e.done   || 0);
+      }
       hasData = true;
     });
   });
@@ -2472,11 +2485,14 @@ function renderCapacityChart() {
     });
   });
 
-  var people = Object.keys(devSP).sort(function(a, b) {
-    if (a === 'Unassigned') return 1;
-    if (b === 'Unassigned') return -1;
-    return devSP[b] - devSP[a];
-  });
+  var assigneeFC = (document.getElementById('f-assignee') || {}).value || '';
+  var people = Object.keys(devSP)
+    .filter(function(n){ return assigneeFC ? n === assigneeFC : true; })
+    .sort(function(a, b) {
+      if (a === 'Unassigned') return 1;
+      if (b === 'Unassigned') return -1;
+      return devSP[b] - devSP[a];
+    });
 
   if (!people.length) {
     el.innerHTML =
