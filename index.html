@@ -2517,19 +2517,11 @@ function renderCapacityChart() {
 
   var source = FILTERED.length ? FILTERED : ACTIVE_SPRINTS;
 
-  // Aggregate SP per dev from ticketsPerDev
-  var devSP = {};
-  source.forEach(function(d) {
-    (d.ticketsPerDev || []).forEach(function(entry) {
-      var name = entry.dev || 'Unassigned';
-      devSP[name] = (devSP[name] || 0) + (entry.sp || 0);
-    });
-  });
-
-  // Aggregate SP per dev per epic from epicBreakdown tickets
-  // Also capture jiraKey per label for linking
-  var devEpicSP  = {};
-  var epicKeyFor = {};  // label → jiraKey (from epicBreakdown)
+  // Derive both devSP (total) and devEpicSP (per-epic breakdown) from epicBreakdown
+  // tickets — single source of truth so the fraction and bar always agree.
+  var devSP     = {};
+  var devEpicSP = {};
+  var epicKeyFor = {};  // label → jiraKey (for linking)
   source.forEach(function(d) {
     (d.epicBreakdown || []).forEach(function(epic) {
       var label = (epic.label || epic.key || 'Other').slice(0, 40);
@@ -2538,6 +2530,7 @@ function renderCapacityChart() {
         var name = t.assignee || 'Unassigned';
         var sp   = t.sp || 0;
         if (!sp) return;
+        devSP[name] = (devSP[name] || 0) + sp;
         if (!devEpicSP[name]) devEpicSP[name] = {};
         devEpicSP[name][label] = (devEpicSP[name][label] || 0) + sp;
       });
