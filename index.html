@@ -65,10 +65,11 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-s
 .bbb-pct{font-size:11px;font-weight:600;min-width:32px;color:var(--text2);}
 
 /* Header */
+.sticky-shell{position:sticky;top:0;z-index:200;}
 .header{
   background:var(--surface);border-bottom:1px solid var(--border);
   padding:0 24px;height:52px;display:flex;align-items:center;gap:16px;
-  position:sticky;top:0;z-index:100;box-shadow:0 1px 3px rgba(0,0,0,.06);
+  box-shadow:0 1px 3px rgba(0,0,0,.06);
 }
 .header-logo{display:flex;align-items:center;gap:10px;}
 .header-dot{
@@ -482,6 +483,8 @@ tr.ticket-col-hdr.hidden{display:none;}
 </head>
 <body>
 
+<!-- Sticky header shell: SP banner + title row + filter/tab bar -->
+<div class="sticky-shell">
 <!-- SP Banner -->
 <div class="sp-banner">
   <strong>SP Scale</strong>
@@ -569,6 +572,7 @@ tr.ticket-col-hdr.hidden{display:none;}
     <button class="btn-clear-filters" id="btn-clear-filters" onclick="clearAllFilters()" title="Reset all filters">&#10005; Clear</button>
   </div>
 </div>
+</div><!-- /sticky-shell -->
 
 <!-- Mobile filter drawer shell (filter-bank moves inside when mobile) -->
 <div class="filter-drawer-overlay" id="filter-drawer-overlay" onclick="closeFilterDrawer()"></div>
@@ -2635,7 +2639,12 @@ function renderSHDTable() {
       // Epic sub-rows (always injected; hidden until expand)
       if (!isNone) {
         if (hasEpics) {
+          var assigneeFilter = (document.getElementById('f-assignee') || {}).value || '';
           d.epicBreakdown.forEach(function(epic, ei) {
+            var visibleTickets = assigneeFilter
+              ? (epic.tickets || []).filter(function(t){ return t.assignee === assigneeFilter; })
+              : (epic.tickets || []);
+            if (assigneeFilter && visibleTickets.length === 0) return;
             var epicId = rowId + '-e' + ei;
             var epicRes = epic.sp > 0 ? Math.round(epic.done / epic.sp * 100) : 0;
             html += '<tr class="epic-group-row hidden status-group-row' + hidden + '" data-grp="' + grpId + '" data-sprint-row="' + rowId + '" id="' + epicId + '">' +
@@ -2662,7 +2671,7 @@ function renderSHDTable() {
               '<td colspan="2"></td>' +
             '</tr>';
             // Ticket rows per epic
-            (epic.tickets || []).forEach(function(t, ti) {
+            visibleTickets.forEach(function(t, ti) {
               var sc = t.status === 'Done' ? 'ts-done'
                      : (t.status === 'In Progress' || t.status === 'Test Complete') ? 'ts-inprogress'
                      : (t.status === 'Accepted' || t.status === 'Acceptance') ? 'ts-accepted'
