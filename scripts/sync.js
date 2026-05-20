@@ -4,8 +4,10 @@
 /**
  * sync.js — fetch live Jira sprint data and patch index.html
  *
- * Patches the full active-sprint row: SP metrics, epicBreakdown (with live
- * ticket statuses), effortBreakdown, and ticketsPerDev.
+ * SP metrics (totalSP / doneSP / committedSP) for scrum boards come from the
+ * Jira Greenhopper sprint-report API — the same source as the velocity chart —
+ * so numbers match exactly.  Boards without a boardId (FIND, CON, LHAPI) fall
+ * back to live JQL issue sums.
  *
  * Env vars required:
  *   JIRA_EMAIL       — Atlassian account email
@@ -19,49 +21,60 @@ const fs    = require('fs');
 const https = require('https');
 const path  = require('path');
 
-const CLOUD_ID  = 'cf0dc8c2-47a8-4929-8d48-2e03205ce9da';
-const JIRA_BASE = `https://api.atlassian.com/ex/jira/${CLOUD_ID}/rest/api/3`;
-const HTML_PATH = path.join(__dirname, '..', 'index.html');
+const CLOUD_ID         = 'cf0dc8c2-47a8-4929-8d48-2e03205ce9da';
+const JIRA_BASE        = `https://api.atlassian.com/ex/jira/${CLOUD_ID}/rest/api/3`;
+const AGILE_BASE       = `https://api.atlassian.com/ex/jira/${CLOUD_ID}/rest/agile/1.0`;
+const GREENHOPPER_BASE = `https://api.atlassian.com/ex/jira/${CLOUD_ID}/rest/greenhopper/1.0`;
+const HTML_PATH        = path.join(__dirname, '..', 'index.html');
 
 const BOARDS = [
-  { board: 'FC',    em: 'Saloni'  },
-  { board: 'CSS',   em: 'Saloni'  },
-  { board: 'CEGEO', em: 'Saloni'  },
-  { board: 'QAS',   em: 'Saloni'  },
-  { board: 'TSC',   em: 'Maria'   },
-  { board: 'MSV',   em: 'Maria'   },
-  { board: 'RPS',   em: 'Maria'   },
-  { board: 'FIND',  em: 'Maria'   },
-  { board: 'TCET',  em: 'Marissa' },
-  { board: 'CON',   em: 'Marissa' },
-  { board: 'LHAPI', em: 'Marissa' },
-  { board: 'TLCC',  em: 'Yan'     },
-  { board: 'QUA',   em: 'Yan'     },
+  { board: 'FC',    em: 'Saloni',  boardId: 1026 },
+  { board: 'CSS',   em: 'Saloni',  boardId: 1021 },
+  { board: 'CEGEO', em: 'Saloni',  boardId: 1205 },
+  { board: 'QAS',   em: 'Saloni',  boardId: 9062 },
+  { board: 'TSC',   em: 'Maria',   boardId: 888  },
+  { board: 'MSV',   em: 'Maria',   boardId: 874  },
+  { board: 'RPS',   em: 'Maria',   boardId: 127  },
+  { board: 'FIND',  em: 'Maria',   boardId: null }, // kanban — no scrum board
+  { board: 'TCET',  em: 'Marissa', boardId: 6221 },
+  { board: 'CON',   em: 'Marissa', boardId: null }, // kanban — no scrum board
+  { board: 'LHAPI', em: 'Marissa', boardId: null }, // kanban — no scrum board
+  { board: 'TLCC',  em: 'Yan',     boardId: 6220 },
+  { board: 'QUA',   em: 'Yan',     boardId: 1184 },
 ];
 
-// ─── Jira REST ────────────────────────────────────────────────────────────────
+// ─── HTTP helpers ─────────────────────────────────────────────────────────────
 
-function jiraGet(urlPath) {
-  const auth = Buffer.from(`${process.env.JIRA_EMAIL}:${process.env.JIRA_API_TOKEN}`).toString('base64');
-  return new Promise((resolve, reject) => {
-    const req = https.get(
-      `${JIRA_BASE}${urlPath}`,
-      { headers: { Authorization: `Basic ${auth}`, Accept: 'application/json' } },
-      (res) => {
-        let data = '';
-        res.on('data', c => data += c);
-        res.on('end', () => {
-          if (res.statusCode >= 400) {
-            return reject(new Error(`HTTP ${res.statusCode}: ${data.slice(0, 200)}`));
-          }
-          try { resolve(JSON.parse(data)); } catch (e) { reject(e); }
-        });
-      }
-    );
-    req.on('error', reject);
-    req.setTimeout(30000, () => { req.destroy(); reject(new Error('Timeout')); });
-  });
+function makeGet(base) {
+  const auth = () => Buffer.from(`${process.env.JIRA_EMAIL}:${process.env.JIRA_API_TOKEN}`).toString('base64');
+  return function get(urlPath) {
+    const url = `${base}${urlPath}`;
+    return new Promise((resolve, reject) => {
+      const req = https.get(
+        url,
+        { headers: { Authorization: `Basic ${auth()}`, Accept: 'application/json' } },
+        (res) => {
+          let data = '';
+          res.on('data', c => data += c);
+          res.on('end', () => {
+            if (res.statusCode >= 400) {
+              return reject(new Error(`HTTP ${res.statusCode} ${url}: ${data.slice(0, 300)}`));
+            }
+            try { resolve(JSON.parse(data)); } catch (e) { reject(e); }
+          });
+        }
+      );
+      req.on('error', reject);
+      req.setTimeout(30000, () => { req.destroy(); reject(new Error(`Timeout: ${url}`)); });
+    });
+  };
 }
+
+const jiraGet        = makeGet(JIRA_BASE);
+const agileGet       = makeGet(AGILE_BASE);
+const greenphopper   = makeGet(GREENHOPPER_BASE);
+
+// ─── Jira REST (issue search) ─────────────────────────────────────────────────
 
 async function fetchIssues(board, sprintClause) {
   const fields = [
@@ -85,7 +98,67 @@ async function fetchIssues(board, sprintClause) {
   return issues;
 }
 
-// ─── Metric helpers ───────────────────────────────────────────────────────────
+// Fetch issues for a specific named sprint (used for breakdown data)
+async function fetchIssuesBySprint(board, sprintName) {
+  const fields = [
+    'summary', 'status', 'assignee', 'issuetype', 'labels',
+    'customfield_10034', 'customfield_10016', 'customfield_10020', 'parent', 'issuelinks',
+  ].join(',');
+  const jql = encodeURIComponent(`project = ${board} AND sprint = "${sprintName}" ORDER BY created ASC`);
+
+  let issues = [];
+  let nextPageToken;
+
+  while (true) {
+    const qs = nextPageToken
+      ? `/search/jql?jql=${jql}&fields=${fields}&maxResults=100&nextPageToken=${encodeURIComponent(nextPageToken)}`
+      : `/search/jql?jql=${jql}&fields=${fields}&maxResults=100`;
+    const data = await jiraGet(qs);
+    issues = issues.concat(data.issues || []);
+    if (!data.nextPageToken || !(data.issues || []).length) break;
+    nextPageToken = data.nextPageToken;
+  }
+  return issues;
+}
+
+// ─── Agile REST (sprints list) ────────────────────────────────────────────────
+
+async function fetchSprintList(boardId, state) {
+  let sprints = [], startAt = 0;
+  while (true) {
+    const data = await agileGet(`/board/${boardId}/sprint?state=${state}&startAt=${startAt}&maxResults=50`);
+    sprints = sprints.concat(data.values || []);
+    if (data.isLast || !(data.values || []).length) break;
+    startAt += data.values.length;
+  }
+  return sprints;
+}
+
+// ─── Greenhopper sprint report ────────────────────────────────────────────────
+
+async function fetchSprintReport(boardId, sprintId) {
+  const r = await greenphopper(`/rapid/charts/sprintreport?rapidViewId=${boardId}&sprintId=${sprintId}`);
+  const c = r.contents || {};
+
+  const completedIssues = c.completedIssues                    || [];
+  const notCompleted    = c.issuesNotCompletedInCurrentSprint   || [];
+  const punted          = c.puntedIssues                        || [];
+
+  // committedSP = SP at sprint start (matches "Commitment" in velocity chart)
+  // doneSP      = SP of completed issues (matches "Completed" in velocity chart)
+  const committedSP = r1(c.completedIssuesInitialEstimateSum?.value  ?? 0);
+  const doneSP      = r1(c.completedIssuesEstimateSum?.value         ?? 0);
+  const pendingSP   = r1(c.issuesNotCompletedEstimateSum?.value       ?? 0);
+  const inProgSP    = 0; // sprint report doesn't break out in-progress separately
+  const totalSP     = r1(committedSP); // totalSP = what was committed at start
+  const issues      = completedIssues.length + notCompleted.length + punted.length;
+  const spRes       = pct(doneSP, committedSP);
+
+  return { issues, totalSP, doneSP, pendingSP, inProgressSP: inProgSP,
+           committedSP, spRes, velocity: spRes };
+}
+
+// ─── Metric helpers (JQL fallback for boards without boardId) ─────────────────
 
 function sp(issue) {
   const f = issue.fields;
@@ -109,8 +182,11 @@ function calcMetrics(issues) {
   const inProgSP  = r1(issues.filter(isInProgress).reduce((s, i) => s + sp(i), 0));
   const pendingSP = r1(totalSP - doneSP);
   const spRes     = pct(doneSP, totalSP);
-  return { issues: issues.length, totalSP, doneSP, pendingSP, inProgressSP: inProgSP, committedSP: totalSP, spRes, velocity: spRes };
+  return { issues: issues.length, totalSP, doneSP, pendingSP, inProgressSP: inProgSP,
+           committedSP: totalSP, spRes, velocity: spRes };
 }
+
+// ─── Breakdown builders ───────────────────────────────────────────────────────
 
 function buildEpicBreakdown(issues) {
   const epicMap = {};
@@ -224,14 +300,13 @@ function serializeTicketsPerDev(arr) {
 const METRICS_RE = /, issues:\d+(?:\.\d+)?, totalSP:\d+(?:\.\d+)?, doneSP:\d+(?:\.\d+)?, pendingSP:\d+(?:\.\d+)?, inProgressSP:\d+(?:\.\d+)?, committedSP:\d+(?:\.\d+)?(, deltaSP:[^,]+)?, spRes:\d+, velocity:\d+/;
 
 // Matches the entire epicBreakdown+effortBreakdown+ticketsPerDev block on one line.
-// Uses a non-greedy match inside brackets; works because each row is a single line.
 const PAYLOAD_RE = /, epicBreakdown:\[.*?\], effortBreakdown:\{[^}]*\}(?:, _hasStatusBreakdown:true)?(?:, ticketsPerDev:\[.*?\])?(?=\})/;
 
 const SPRINTSTATUS_RE = /sprintStatus:'(?:active|future|closed)'/;
 
-// Extract the sprint name matching the expected state from customfield_10020.
-// An issue can belong to multiple sprints (e.g. carried over from a closed one);
-// we always want the sprint whose state matches what we fetched.
+// Also patch sprintGoal when we have a fresh value from the sprint report API
+const SPRINTGOAL_RE = /sprintGoal:'(?:[^'\\]|\\.)*'/;
+
 function getSprintNameForState(issue, targetState) {
   const sprints = issue.fields?.customfield_10020;
   if (!Array.isArray(sprints) || !sprints.length) return null;
@@ -239,7 +314,6 @@ function getSprintNameForState(issue, targetState) {
   return (match || sprints[0])?.name || null;
 }
 
-// Group issues by sprint name, using the target state to pick the right sprint
 function groupBySprint(issues, targetState) {
   const map = {};
   issues.forEach(issue => {
@@ -251,8 +325,7 @@ function groupBySprint(issues, targetState) {
   return map;
 }
 
-function patchHTMLBySprintName(html, sprintName, sprintStatus, m, epicBreakdown, effortBreakdown, ticketsPerDev) {
-  // $1 re-emits the optional ", deltaSP:..." capture so it isn't lost
+function patchHTMLBySprintName(html, sprintName, sprintStatus, m, epicBreakdown, effortBreakdown, ticketsPerDev, sprintGoal) {
   const metricsRepl      = `, issues:${m.issues}, totalSP:${m.totalSP}, doneSP:${m.doneSP}, pendingSP:${m.pendingSP}, inProgressSP:${m.inProgressSP}, committedSP:${m.committedSP}$1, spRes:${m.spRes}, velocity:${m.velocity}`;
   const payloadRepl      = `, epicBreakdown:${serializeEpicBreakdown(epicBreakdown)}, effortBreakdown:${serializeObj(effortBreakdown)}, _hasStatusBreakdown:true, ticketsPerDev:${serializeTicketsPerDev(ticketsPerDev)}`;
   const sprintStatusRepl = `sprintStatus:'${sprintStatus}'`;
@@ -265,6 +338,7 @@ function patchHTMLBySprintName(html, sprintName, sprintStatus, m, epicBreakdown,
     let updated = line.replace(METRICS_RE, metricsRepl);
     updated = updated.replace(PAYLOAD_RE, payloadRepl);
     updated = updated.replace(SPRINTSTATUS_RE, sprintStatusRepl);
+    if (sprintGoal != null) updated = updated.replace(SPRINTGOAL_RE, `sprintGoal:${jsStr(sprintGoal)}`);
     if (updated !== line) found = true;
     return updated;
   });
@@ -274,7 +348,6 @@ function patchHTMLBySprintName(html, sprintName, sprintStatus, m, epicBreakdown,
 }
 
 function patchHTML(html, board, sprintStatus, m, epicBreakdown, effortBreakdown, ticketsPerDev) {
-  // $1 re-emits the optional ", deltaSP:..." capture so it isn't lost
   const metricsRepl      = `, issues:${m.issues}, totalSP:${m.totalSP}, doneSP:${m.doneSP}, pendingSP:${m.pendingSP}, inProgressSP:${m.inProgressSP}, committedSP:${m.committedSP}$1, spRes:${m.spRes}, velocity:${m.velocity}`;
   const payloadRepl      = `, epicBreakdown:${serializeEpicBreakdown(epicBreakdown)}, effortBreakdown:${serializeObj(effortBreakdown)}, _hasStatusBreakdown:true, ticketsPerDev:${serializeTicketsPerDev(ticketsPerDev)}`;
   const sprintStatusRepl = `sprintStatus:'${sprintStatus}'`;
@@ -307,60 +380,116 @@ async function main() {
 
   let html = fs.readFileSync(HTML_PATH, 'utf8');
 
-  for (const { board } of BOARDS) {
-    // Active sprint
+  for (const { board, boardId } of BOARDS) {
+
+    // ── Active sprint ──────────────────────────────────────────────────────────
     process.stdout.write(`  [${board.padEnd(6)}] active... `);
     try {
-      const issues          = await fetchIssues(board, 'openSprints()');
-      const metrics         = calcMetrics(issues);
-      const epicBreakdown   = buildEpicBreakdown(issues);
-      const effortBreakdown = buildEffortBreakdown(issues);
-      const ticketsPerDev   = buildTicketsPerDev(issues);
-      html = patchHTML(html, board, 'active', metrics, epicBreakdown, effortBreakdown, ticketsPerDev);
-      console.log(`${String(issues.length).padStart(3)} issues — totalSP:${metrics.totalSP}  doneSP:${metrics.doneSP}  (${metrics.spRes}%)`);
-    } catch (err) {
-      console.log(`FAILED — ${err.message}`);
-    }
-
-    // Future sprints — group by sprint name (same as closed) to avoid mixing multiple futures
-    process.stdout.write(`  [${board.padEnd(6)}] future... `);
-    try {
-      const issues = await fetchIssues(board, 'futureSprints()');
-      if (!issues.length) { console.log('(no future sprint)'); }
-      else {
-        const byName = groupBySprint(issues, 'future');
-        let count = 0;
-        for (const [name, sprintIssues] of Object.entries(byName)) {
-          const metrics         = calcMetrics(sprintIssues);
-          const epicBreakdown   = buildEpicBreakdown(sprintIssues);
-          const effortBreakdown = buildEffortBreakdown(sprintIssues);
-          const ticketsPerDev   = buildTicketsPerDev(sprintIssues);
-          html = patchHTMLBySprintName(html, name, 'future', metrics, epicBreakdown, effortBreakdown, ticketsPerDev);
-          count++;
+      if (boardId) {
+        // Scrum board: list active sprints, get sprint report for each
+        const activeSprints = await fetchSprintList(boardId, 'active');
+        if (!activeSprints.length) {
+          console.log('(no active sprint)');
+        } else {
+          for (const sprint of activeSprints) {
+            const [metrics, issues] = await Promise.all([
+              fetchSprintReport(boardId, sprint.id),
+              fetchIssuesBySprint(board, sprint.name),
+            ]);
+            const epicBreakdown   = buildEpicBreakdown(issues);
+            const effortBreakdown = buildEffortBreakdown(issues);
+            const ticketsPerDev   = buildTicketsPerDev(issues);
+            // Use issue count from JQL (more accurate than sprint report for active)
+            metrics.issues = issues.length;
+            html = patchHTMLBySprintName(html, sprint.name, 'active', metrics, epicBreakdown, effortBreakdown, ticketsPerDev, sprint.goal || null);
+            console.log(`${String(issues.length).padStart(3)} issues — committed:${metrics.committedSP}  done:${metrics.doneSP}  (${metrics.spRes}%) [sprint report]`);
+          }
         }
-        console.log(`${count} future sprints synced`);
+      } else {
+        // Kanban fallback: JQL-based metrics
+        const issues          = await fetchIssues(board, 'openSprints()');
+        const metrics         = calcMetrics(issues);
+        const epicBreakdown   = buildEpicBreakdown(issues);
+        const effortBreakdown = buildEffortBreakdown(issues);
+        const ticketsPerDev   = buildTicketsPerDev(issues);
+        html = patchHTML(html, board, 'active', metrics, epicBreakdown, effortBreakdown, ticketsPerDev);
+        console.log(`${String(issues.length).padStart(3)} issues — totalSP:${metrics.totalSP}  doneSP:${metrics.doneSP}  (${metrics.spRes}%) [JQL fallback]`);
       }
     } catch (err) {
       console.log(`FAILED — ${err.message}`);
     }
 
-    // Closed sprints — always sync so data stays current for all historical sprints
+    // ── Future sprints ─────────────────────────────────────────────────────────
+    process.stdout.write(`  [${board.padEnd(6)}] future... `);
+    try {
+      if (boardId) {
+        const futureSprints = await fetchSprintList(boardId, 'future');
+        if (!futureSprints.length) { console.log('(none)'); }
+        else {
+          for (const sprint of futureSprints) {
+            const issues          = await fetchIssuesBySprint(board, sprint.name);
+            const metrics         = calcMetrics(issues);
+            const epicBreakdown   = buildEpicBreakdown(issues);
+            const effortBreakdown = buildEffortBreakdown(issues);
+            const ticketsPerDev   = buildTicketsPerDev(issues);
+            html = patchHTMLBySprintName(html, sprint.name, 'future', metrics, epicBreakdown, effortBreakdown, ticketsPerDev, sprint.goal || null);
+          }
+          console.log(`${futureSprints.length} future sprint(s) synced`);
+        }
+      } else {
+        // Kanban fallback
+        const issues = await fetchIssues(board, 'futureSprints()');
+        if (!issues.length) { console.log('(none)'); }
+        else {
+          const byName = groupBySprint(issues, 'future');
+          for (const [name, sprintIssues] of Object.entries(byName)) {
+            const metrics         = calcMetrics(sprintIssues);
+            const epicBreakdown   = buildEpicBreakdown(sprintIssues);
+            const effortBreakdown = buildEffortBreakdown(sprintIssues);
+            const ticketsPerDev   = buildTicketsPerDev(sprintIssues);
+            html = patchHTMLBySprintName(html, name, 'future', metrics, epicBreakdown, effortBreakdown, ticketsPerDev);
+          }
+          console.log(`${Object.keys(byName).length} future sprint(s) synced [JQL fallback]`);
+        }
+      }
+    } catch (err) {
+      console.log(`FAILED — ${err.message}`);
+    }
+
+    // ── Closed sprints ─────────────────────────────────────────────────────────
     process.stdout.write(`  [${board.padEnd(6)}] closed... `);
     try {
-      const issues = await fetchIssues(board, 'closedSprints()');
-      if (!issues.length) { console.log('(none)'); }
-      else {
-        const byName = groupBySprint(issues, 'closed');
-        let count = 0;
-        for (const [name, sprintIssues] of Object.entries(byName)) {
-          const metrics         = calcMetrics(sprintIssues);
-          const epicBreakdown   = buildEpicBreakdown(sprintIssues);
-          const effortBreakdown = buildEffortBreakdown(sprintIssues);
-          const ticketsPerDev   = buildTicketsPerDev(sprintIssues);
-          html = patchHTMLBySprintName(html, name, 'closed', metrics, epicBreakdown, effortBreakdown, ticketsPerDev);
-          count++;
+      if (boardId) {
+        const closedSprints = await fetchSprintList(boardId, 'closed');
+        if (!closedSprints.length) { console.log('(none)'); }
+        else {
+          for (const sprint of closedSprints) {
+            const [metrics, issues] = await Promise.all([
+              fetchSprintReport(boardId, sprint.id),
+              fetchIssuesBySprint(board, sprint.name),
+            ]);
+            const epicBreakdown   = buildEpicBreakdown(issues);
+            const effortBreakdown = buildEffortBreakdown(issues);
+            const ticketsPerDev   = buildTicketsPerDev(issues);
+            html = patchHTMLBySprintName(html, sprint.name, 'closed', metrics, epicBreakdown, effortBreakdown, ticketsPerDev, sprint.goal || null);
+          }
+          console.log(`${closedSprints.length} closed sprint(s) synced`);
         }
-        console.log(`${count} closed sprints synced`);
+      } else {
+        // Kanban fallback
+        const issues = await fetchIssues(board, 'closedSprints()');
+        if (!issues.length) { console.log('(none)'); }
+        else {
+          const byName = groupBySprint(issues, 'closed');
+          for (const [name, sprintIssues] of Object.entries(byName)) {
+            const metrics         = calcMetrics(sprintIssues);
+            const epicBreakdown   = buildEpicBreakdown(sprintIssues);
+            const effortBreakdown = buildEffortBreakdown(sprintIssues);
+            const ticketsPerDev   = buildTicketsPerDev(sprintIssues);
+            html = patchHTMLBySprintName(html, name, 'closed', metrics, epicBreakdown, effortBreakdown, ticketsPerDev);
+          }
+          console.log(`${Object.keys(byName).length} closed sprint(s) synced [JQL fallback]`);
+        }
       }
     } catch (err) {
       console.log(`FAILED — ${err.message}`);
