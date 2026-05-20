@@ -2269,10 +2269,11 @@ function renderVelocityChart(canvasId) {
 
   var boardVal  = (document.getElementById('f-board')  || {}).value || '';
   var sprintVal = (document.getElementById('f-sprint') || {}).value || '';
+  var statusVal = (document.getElementById('f-status') || {}).value || '';
   var source = FILTERED.length ? FILTERED : ACTIVE_SPRINTS;
 
-  // Require both board AND a specific sprint
-  if (!boardVal || !sprintVal) {
+  // Require board + specific sprint, OR board + active status (active implies one sprint)
+  if (!boardVal || (!sprintVal && statusVal !== 'active')) {
     if (ctx) ctx.style.display = 'none';
     var existing = wrap ? wrap.querySelector('.epic-empty') : null;
     if (!existing && wrap) {
@@ -2430,9 +2431,10 @@ function renderCapacityChart() {
 
   var boardVal  = (document.getElementById('f-board')  || {}).value || '';
   var sprintVal = (document.getElementById('f-sprint') || {}).value || '';
+  var statusVal = (document.getElementById('f-status') || {}).value || '';
 
-  // Require both board AND a specific sprint
-  if (!boardVal || !sprintVal) {
+  // Require board + specific sprint, OR board + active status (active implies one sprint)
+  if (!boardVal || (!sprintVal && statusVal !== 'active')) {
     el.innerHTML =
       '<div class="cap-empty">' +
         '<div class="cap-empty-icon">&#128100;</div>' +
