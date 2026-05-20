@@ -569,7 +569,7 @@ tr.ticket-col-hdr.hidden{display:none;}
     <select id="f-assignee" onchange="onAssigneeChange()"></select>
   </div>
   <div class="filter-group" id="filter-clear-group" style="border-right:none;">
-    <button class="btn-clear-filters" id="btn-clear-filters" onclick="clearAllFilters()" title="Reset all filters">&#10005; Clear</button>
+    <button class="btn-clear-filters" id="btn-clear-filters" onclick="clearAllFilters()" title="Reset all filters">&#10005; Clear all filters</button>
   </div>
 </div>
 </div><!-- /sticky-shell -->
@@ -1942,6 +1942,10 @@ function clearAllFilters() {
   if (sprintSel) sprintSel.value = '';
   var assigneeSel = document.getElementById('f-assignee');
   if (assigneeSel) assigneeSel.value = '';
+  var emSel = document.getElementById('f-em');
+  if (emSel) emSel.value = '';
+  var boardSel = document.getElementById('f-board');
+  if (boardSel) boardSel.value = '';
   refreshAllFilters();
   applyFilters();
 }
