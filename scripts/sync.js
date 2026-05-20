@@ -344,7 +344,8 @@ async function main() {
     }
   }
 
-  html = html.replace(/id="data-banner"[^>]*/, `id="data-banner" data-synced-at="${new Date().toISOString()}"`);
+  const trigger = process.env.SYNC_TRIGGER === 'workflow_dispatch' ? 'manual' : 'schedule';
+  html = html.replace(/id="data-banner"[^>]*/, `id="data-banner" data-synced-at="${new Date().toISOString()}" data-trigger="${trigger}"`);
 
   fs.writeFileSync(HTML_PATH, html, 'utf8');
   console.log('\nindex.html updated.');
