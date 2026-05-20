@@ -244,6 +244,7 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-s
 .bc-meta{display:flex;justify-content:space-between;font-size:10px;color:var(--muted);}
 .bc-sprint{font-size:10px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .bc-dates{font-size:9px;color:var(--muted2);margin-top:2px;letter-spacing:.2px;}
+.bc-status{margin-top:5px;}
 .bc-goal-toggle{font-size:9px;font-weight:600;color:var(--accent);cursor:pointer;display:inline-flex;align-items:center;gap:3px;margin-top:6px;user-select:none;letter-spacing:.3px;text-transform:uppercase;}
 .bc-goal-toggle .bc-goal-arrow{display:inline-block;transition:transform .2s;font-style:normal;}
 .bc-goal-body{font-size:10px;color:var(--muted);font-style:italic;line-height:1.5;margin-top:4px;display:none;}
@@ -2110,9 +2111,41 @@ function renderBoardHealthGrid(containerId) {
   });
   var data = Object.values(byBoard);
 
+  // When filtering by active, show stub cards for boards with no active sprint
+  if (statusF === 'active') {
+    var allBoards = ALL_DATA.reduce(function(acc, d) {
+      if (acc.indexOf(d.board) === -1) acc.push(d.board);
+      return acc;
+    }, []);
+    var emF = document.getElementById('f-em') ? document.getElementById('f-em').value : '';
+    var boardF = document.getElementById('f-board') ? document.getElementById('f-board').value : '';
+    allBoards.forEach(function(board) {
+      if (byBoard[board]) return; // already has an active sprint
+      var sample = ALL_DATA.find(function(d) { return d.board === board; });
+      if (!sample) return;
+      if (emF && sample.em !== emF) return;
+      if (boardF && board !== boardF) return;
+      data.push({ board: board, em: sample.em, _noActiveSprint: true, issues: 0, totalSP: 0, doneSP: 0, pendingSP: 0, spRes: 0 });
+    });
+  }
+
   if (!data.length) { el.innerHTML = '<p style="color:var(--muted);padding:12px">No data for selected filters.</p>'; return; }
 
+  var STATUS_LABELS_CARD = {active:'Active', future:'Future', closed:'Closed', none:'No Sprint'};
+
   el.innerHTML = data.map(function(d){
+    // Stub card for boards with no active sprint when status=active filter is on
+    if (d._noActiveSprint) {
+      return '<div class="board-card health-none">' +
+        '<div class="bc-header">' +
+          '<div><div class="bc-name">' + d.board + '</div><div class="bc-em">' + d.em + '</div></div>' +
+          '<div class="bc-pct none">—</div>' +
+        '</div>' +
+        '<div class="bc-bar"><div class="bc-bar-fill" style="width:0%;background:var(--muted)"></div></div>' +
+        '<div class="bc-meta"><span>— SP</span><span>—</span></div>' +
+        '<div class="bc-sprint" style="font-style:italic;">No active sprint</div>' +
+      '</div>';
+    }
     var hasWork = d.issues > 0 || d.totalSP > 0;
     var isNone  = !hasWork;
     var pct = isNone ? 0 : d.spRes;
@@ -2122,6 +2155,8 @@ function renderBoardHealthGrid(containerId) {
     var sprintLabel = isNone
       ? (d._sprintCount > 1 ? d._sprintCount + ' sprints · no work planned' : 'No work planned')
       : (d._multiSprint ? d._multiSprint : d.sprintName);
+    // Show status pill only on single-sprint cards where it adds information
+    var showStatusPill = !d._multiSprint && d.sprintStatus && d.sprintStatus !== 'none';
     return '<div class="board-card health-' + hc + '">' +
       '<div class="bc-header">' +
         '<div><div class="bc-name">' + d.board + '</div><div class="bc-em">' + d.em + '</div></div>' +
@@ -2134,6 +2169,7 @@ function renderBoardHealthGrid(containerId) {
       '</div>' +
       '<div class="bc-sprint">' + sprintLabel + '</div>' +
       ((!isNone && d.startDate && !d._multiSprint) ? '<div class="bc-dates">' + d.startDate + ' → ' + (d.endDate || '?') + '</div>' : '') +
+      (showStatusPill ? '<div class="bc-status"><span class="pill ' + d.sprintStatus + '"><span class="pill-dot"></span>' + (STATUS_LABELS_CARD[d.sprintStatus] || d.sprintStatus) + '</span></div>' : '') +
       ((!isNone && d.sprintGoal && !d._multiSprint) ? '<span class="bc-goal-toggle" onclick="toggleGoal(this)"><span class="bc-goal-arrow">▶</span> Sprint Goal</span><div class="bc-goal-body">' + d.sprintGoal + '</div>' : '') +
     '</div>';
   }).join('');
