@@ -215,7 +215,7 @@ const METRICS_RE = /, issues:\d+(?:\.\d+)?, totalSP:\d+(?:\.\d+)?, doneSP:\d+(?:
 
 // Matches the entire epicBreakdown+effortBreakdown+ticketsPerDev block on one line.
 // Uses a non-greedy match inside brackets; works because each row is a single line.
-const PAYLOAD_RE = /, epicBreakdown:\[.*\], effortBreakdown:\{[^}]*\}(?:, _hasStatusBreakdown:true)?, ticketsPerDev:\[.*\](?=\})/;
+const PAYLOAD_RE = /, epicBreakdown:\[.*?\], effortBreakdown:\{[^}]*\}(?:, _hasStatusBreakdown:true)?(?:, ticketsPerDev:\[.*?\])?(?=\})/;
 
 // Extract sprint name from customfield_10020 (array of sprint objects)
 function getSprintName(issue) {
