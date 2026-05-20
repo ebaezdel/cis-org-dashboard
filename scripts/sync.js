@@ -66,7 +66,7 @@ function jiraGet(urlPath) {
 async function fetchIssues(board, sprintClause) {
   const fields = [
     'summary', 'status', 'assignee', 'issuetype', 'labels',
-    'customfield_10034', 'customfield_10016', 'customfield_10020', 'parent',
+    'customfield_10034', 'customfield_10016', 'customfield_10020', 'parent', 'issuelinks',
   ].join(',');
   const jql = encodeURIComponent(`project = ${board} AND sprint in ${sprintClause} ORDER BY created ASC`);
 
@@ -162,19 +162,27 @@ function buildTicketsPerDev(issues) {
     .map(([dev, v]) => ({ dev, tickets: v.tickets, sp: v.sp }));
 }
 
+function isCntntLinked(issue) {
+  return (issue.fields?.issuelinks || []).some(link => {
+    const key = (link.outwardIssue?.key || link.inwardIssue?.key || '');
+    return key.startsWith('CNTNT-');
+  });
+}
+
 function buildEffortBreakdown(issues) {
   const counts = {};
   issues.forEach(i => {
+    if (!isCntntLinked(i)) return;
     const labels = i.fields?.labels || [];
     const type = labels.includes('ELT')             ? 'ELT (sponsor)'
                : labels.includes('Contractual')     ? 'Contractual / Legal'
                : labels.includes('ProductPriority') ? 'Product / Business priority change'
                : labels.includes('TechRequest')     ? 'Technical request'
                : labels.includes('NewFutureWork')   ? 'New future work'
-               : null;
-    if (type) counts[type] = (counts[type] || 0) + 1;
+               : 'Unclassified intake';
+    counts[type] = (counts[type] || 0) + 1;
   });
-  const total = issues.length || 1;
+  const total = Object.values(counts).reduce((s, v) => s + v, 0) || 1;
   return Object.fromEntries(
     Object.entries(counts).map(([k, v]) => [k, Math.round(v / total * 100)])
   );

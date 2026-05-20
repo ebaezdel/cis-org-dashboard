@@ -599,7 +599,7 @@ tr.ticket-col-hdr.hidden{display:none;}
       <div class="chart-wrap" id="chart-epic-wrap"><canvas id="chart-velocity"></canvas></div>
     </div>
     <div class="chart-card">
-      <h3>Request Justification Type <span class="sub">Why was this work requested?</span></h3>
+      <h3>Intake Requests <span class="sub">Why was this work requested?</span></h3>
       <div class="chart-wrap" id="chart-effort-wrap"><canvas id="chart-effort"></canvas></div>
     </div>
     <div class="chart-card">
@@ -2369,12 +2369,12 @@ function renderEffortChart() {
   wrap.innerHTML =
     '<div class="rjt-empty">' +
       '<div class="rjt-empty-icon">&#127991;</div>' +
-      '<div class="rjt-empty-title">Planned categories</div>' +
+      '<div class="rjt-empty-title">Intake request types</div>' +
       '<div class="rjt-chips">' +
         ['ELT (sponsor)', 'Contractual / Legal', 'Product / Business priority change', 'Technical request', 'New future work']
           .map(function(c){ return '<span class="rjt-chip">'+c+'</span>'; }).join('') +
       '</div>' +
-      '<div class="rjt-empty-msg">Tag tickets in Jira with one of the labels above<br>to populate this chart on the next sync.</div>' +
+      '<div class="rjt-empty-msg">On each sprint ticket linked to a CNTNT request,<br>add one of the labels above — chart populates on next sync.</div>' +
     '</div>';
 }
 
