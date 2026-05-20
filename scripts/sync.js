@@ -227,6 +227,8 @@ const METRICS_RE = /, issues:\d+(?:\.\d+)?, totalSP:\d+(?:\.\d+)?, doneSP:\d+(?:
 // Uses a non-greedy match inside brackets; works because each row is a single line.
 const PAYLOAD_RE = /, epicBreakdown:\[.*?\], effortBreakdown:\{[^}]*\}(?:, _hasStatusBreakdown:true)?(?:, ticketsPerDev:\[.*?\])?(?=\})/;
 
+const SPRINTSTATUS_RE = /sprintStatus:'(?:active|future|closed)'/;
+
 // Extract the sprint name matching the expected state from customfield_10020.
 // An issue can belong to multiple sprints (e.g. carried over from a closed one);
 // we always want the sprint whose state matches what we fetched.
@@ -249,10 +251,11 @@ function groupBySprint(issues, targetState) {
   return map;
 }
 
-function patchHTMLBySprintName(html, sprintName, m, epicBreakdown, effortBreakdown, ticketsPerDev) {
+function patchHTMLBySprintName(html, sprintName, sprintStatus, m, epicBreakdown, effortBreakdown, ticketsPerDev) {
   // $1 re-emits the optional ", deltaSP:..." capture so it isn't lost
-  const metricsRepl = `, issues:${m.issues}, totalSP:${m.totalSP}, doneSP:${m.doneSP}, pendingSP:${m.pendingSP}, inProgressSP:${m.inProgressSP}, committedSP:${m.committedSP}$1, spRes:${m.spRes}, velocity:${m.velocity}`;
-  const payloadRepl = `, epicBreakdown:${serializeEpicBreakdown(epicBreakdown)}, effortBreakdown:${serializeObj(effortBreakdown)}, _hasStatusBreakdown:true, ticketsPerDev:${serializeTicketsPerDev(ticketsPerDev)}`;
+  const metricsRepl      = `, issues:${m.issues}, totalSP:${m.totalSP}, doneSP:${m.doneSP}, pendingSP:${m.pendingSP}, inProgressSP:${m.inProgressSP}, committedSP:${m.committedSP}$1, spRes:${m.spRes}, velocity:${m.velocity}`;
+  const payloadRepl      = `, epicBreakdown:${serializeEpicBreakdown(epicBreakdown)}, effortBreakdown:${serializeObj(effortBreakdown)}, _hasStatusBreakdown:true, ticketsPerDev:${serializeTicketsPerDev(ticketsPerDev)}`;
+  const sprintStatusRepl = `sprintStatus:'${sprintStatus}'`;
 
   const lines = html.split('\n');
   let found = false;
@@ -261,6 +264,7 @@ function patchHTMLBySprintName(html, sprintName, m, epicBreakdown, effortBreakdo
     if (!line.includes(`sprintName:'${sprintName}'`)) return line;
     let updated = line.replace(METRICS_RE, metricsRepl);
     updated = updated.replace(PAYLOAD_RE, payloadRepl);
+    updated = updated.replace(SPRINTSTATUS_RE, sprintStatusRepl);
     if (updated !== line) found = true;
     return updated;
   });
@@ -271,8 +275,9 @@ function patchHTMLBySprintName(html, sprintName, m, epicBreakdown, effortBreakdo
 
 function patchHTML(html, board, sprintStatus, m, epicBreakdown, effortBreakdown, ticketsPerDev) {
   // $1 re-emits the optional ", deltaSP:..." capture so it isn't lost
-  const metricsRepl  = `, issues:${m.issues}, totalSP:${m.totalSP}, doneSP:${m.doneSP}, pendingSP:${m.pendingSP}, inProgressSP:${m.inProgressSP}, committedSP:${m.committedSP}$1, spRes:${m.spRes}, velocity:${m.velocity}`;
-  const payloadRepl  = `, epicBreakdown:${serializeEpicBreakdown(epicBreakdown)}, effortBreakdown:${serializeObj(effortBreakdown)}, _hasStatusBreakdown:true, ticketsPerDev:${serializeTicketsPerDev(ticketsPerDev)}`;
+  const metricsRepl      = `, issues:${m.issues}, totalSP:${m.totalSP}, doneSP:${m.doneSP}, pendingSP:${m.pendingSP}, inProgressSP:${m.inProgressSP}, committedSP:${m.committedSP}$1, spRes:${m.spRes}, velocity:${m.velocity}`;
+  const payloadRepl      = `, epicBreakdown:${serializeEpicBreakdown(epicBreakdown)}, effortBreakdown:${serializeObj(effortBreakdown)}, _hasStatusBreakdown:true, ticketsPerDev:${serializeTicketsPerDev(ticketsPerDev)}`;
+  const sprintStatusRepl = `sprintStatus:'${sprintStatus}'`;
 
   const lines = html.split('\n');
   let found = false;
@@ -281,6 +286,7 @@ function patchHTML(html, board, sprintStatus, m, epicBreakdown, effortBreakdown,
     if (!line.includes(`board:'${board}'`) || !line.includes(`sprintStatus:'${sprintStatus}'`)) return line;
     let updated = line.replace(METRICS_RE, metricsRepl);
     updated = updated.replace(PAYLOAD_RE, payloadRepl);
+    updated = updated.replace(SPRINTSTATUS_RE, sprintStatusRepl);
     if (updated !== line) found = true;
     return updated;
   });
@@ -329,7 +335,7 @@ async function main() {
           const epicBreakdown   = buildEpicBreakdown(sprintIssues);
           const effortBreakdown = buildEffortBreakdown(sprintIssues);
           const ticketsPerDev   = buildTicketsPerDev(sprintIssues);
-          html = patchHTMLBySprintName(html, name, metrics, epicBreakdown, effortBreakdown, ticketsPerDev);
+          html = patchHTMLBySprintName(html, name, 'future', metrics, epicBreakdown, effortBreakdown, ticketsPerDev);
           count++;
         }
         console.log(`${count} future sprints synced`);
@@ -351,7 +357,7 @@ async function main() {
           const epicBreakdown   = buildEpicBreakdown(sprintIssues);
           const effortBreakdown = buildEffortBreakdown(sprintIssues);
           const ticketsPerDev   = buildTicketsPerDev(sprintIssues);
-          html = patchHTMLBySprintName(html, name, metrics, epicBreakdown, effortBreakdown, ticketsPerDev);
+          html = patchHTMLBySprintName(html, name, 'closed', metrics, epicBreakdown, effortBreakdown, ticketsPerDev);
           count++;
         }
         console.log(`${count} closed sprints synced`);
