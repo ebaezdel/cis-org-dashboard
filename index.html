@@ -244,7 +244,10 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-s
 .bc-meta{display:flex;justify-content:space-between;font-size:10px;color:var(--muted);}
 .bc-sprint{font-size:10px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .bc-dates{font-size:9px;color:var(--muted2);margin-top:2px;letter-spacing:.2px;}
-.bc-goal{font-size:10px;color:var(--muted);font-style:italic;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;line-height:1.4;margin-top:4px;}
+.bc-goal-toggle{font-size:9px;font-weight:600;color:var(--accent);cursor:pointer;display:inline-flex;align-items:center;gap:3px;margin-top:6px;user-select:none;letter-spacing:.3px;text-transform:uppercase;}
+.bc-goal-toggle .bc-goal-arrow{display:inline-block;transition:transform .2s;font-style:normal;}
+.bc-goal-body{font-size:10px;color:var(--muted);font-style:italic;line-height:1.5;margin-top:4px;display:none;}
+.bc-goal-body.open{display:block;}
 
 /* Charts row */
 .charts-row{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px;}
@@ -625,7 +628,6 @@ tr.ticket-col-hdr.hidden{display:none;}
           <th class="left">EM</th>
           <th class="left">Board</th>
           <th class="left">Sprint</th>
-          <th class="left">Goal</th>
           <th>Start</th>
           <th>End</th>
           <th>Status</th>
@@ -2132,7 +2134,7 @@ function renderBoardHealthGrid(containerId) {
       '</div>' +
       '<div class="bc-sprint">' + sprintLabel + '</div>' +
       ((!isNone && d.startDate && !d._multiSprint) ? '<div class="bc-dates">' + d.startDate + ' → ' + (d.endDate || '?') + '</div>' : '') +
-      ((!isNone && d.sprintGoal && !d._multiSprint) ? '<div class="bc-goal" title="' + d.sprintGoal.replace(/"/g,'&quot;') + '">' + d.sprintGoal + '</div>' : '') +
+      ((!isNone && d.sprintGoal && !d._multiSprint) ? '<span class="bc-goal-toggle" onclick="toggleGoal(this)"><span class="bc-goal-arrow">▶</span> Sprint Goal</span><div class="bc-goal-body">' + d.sprintGoal + '</div>' : '') +
     '</div>';
   }).join('');
 }
@@ -2575,7 +2577,7 @@ function renderSHDTable() {
   if (!tbody) return;
   var data = FILTERED.length ? FILTERED : ACTIVE_SPRINTS;
   if (!data.length) {
-    tbody.innerHTML = '<tr><td colspan="14" class="empty">No data matches filters</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="13" class="empty">No data matches filters</td></tr>';
     return;
   }
 
@@ -2612,7 +2614,7 @@ function renderSHDTable() {
     var pillColor = {active:'var(--green)',future:'var(--blue,#3b82f6)',closed:'var(--muted)',none:'var(--muted)'}[status];
 
     html += '<tr class="status-group-hdr' + collapsed + '" onclick="toggleStatusGroup(\'' + grpId + '\',this)">' +
-      '<td colspan="14"><span class="grp-toggle">▼</span>' +
+      '<td colspan="13"><span class="grp-toggle">▼</span>' +
       '<span style="color:' + pillColor + '">' + STATUS_LABELS[status] + '</span>' +
       '<span style="color:var(--muted);font-weight:400;margin-left:8px;">' + count + ' sprint' + (count !== 1 ? 's' : '') + '</span>' +
       '<span style="color:var(--muted);font-weight:400;margin-left:12px;font-size:10px;">' +
@@ -2650,7 +2652,6 @@ function renderSHDTable() {
         '<td class="left"><span style="font-weight:700;color:' + (EM_COLORS[d.em] || '#ccc') + '">' + d.em + '</span></td>' +
         '<td class="left"><a href="https://moveinc.atlassian.net/jira/software/projects/' + d.board + '/boards" target="_blank" style="color:var(--text);font-weight:700;text-decoration:none;">' + d.board + '</a></td>' +
         '<td class="left" style="font-size:10px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + (isNone ? dash : '<a href="https://moveinc.atlassian.net/issues/?jql=' + encodeURIComponent('project = ' + d.board + ' AND sprint = "' + d.sprintName + '" ORDER BY status ASC') + '" target="_blank" style="color:var(--muted);text-decoration:none;" onmouseover="this.style.color=\'var(--blue)\'" onmouseout="this.style.color=\'var(--muted)\'">' + d.sprintName + '</a>') + '</td>' +
-        '<td class="left" style="font-size:10px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted);font-style:italic;" title="' + (d.sprintGoal || '').replace(/"/g,'&quot;') + '">' + (d.sprintGoal ? d.sprintGoal.slice(0,80) + (d.sprintGoal.length > 80 ? '…' : '') : '—') + '</td>' +
         '<td style="font-size:10px;color:var(--muted);white-space:nowrap;">' + (d.startDate || dash) + '</td>' +
         '<td style="font-size:10px;color:var(--muted);white-space:nowrap;">' + (d.endDate || dash) + '</td>' +
         '<td>' + statusPill(d.sprintStatus) + '</td>' +
@@ -2730,7 +2731,7 @@ function renderSHDTable() {
         } else {
           // Empty state placeholder row
           html += '<tr class="epic-group-row hidden status-group-row' + hidden + '" data-grp="' + grpId + '" data-sprint-row="' + rowId + '">' +
-            '<td colspan="14"><div class="no-epic-data">No epic data — populate <code>epicBreakdown[]</code> via Jira sync</div></td>' +
+            '<td colspan="13"><div class="no-epic-data">No epic data — populate <code>epicBreakdown[]</code> via Jira sync</div></td>' +
           '</tr>';
         }
       }
@@ -2759,6 +2760,13 @@ function renderSHDTable() {
   '</tr>';
 
   tbody.innerHTML = html;
+}
+
+function toggleGoal(el) {
+  var body = el.nextElementSibling;
+  var arrow = el.querySelector('.bc-goal-arrow');
+  var open = body.classList.toggle('open');
+  arrow.style.transform = open ? 'rotate(90deg)' : '';
 }
 
 function toggleStatusGroup(grpId, hdrRow) {
@@ -3243,7 +3251,7 @@ function renderMTTRChart() {
 
 // ─── Export CSV ───────────────────────────────────────────────────────────────
 function exportCSV() {
-  var cols = ['em','board','sprintName','sprintGoal','sprintStatus','fy','quarter','sprint','issues','totalSP','doneSP','pendingSP','spRes','velocity','unplannedPct'];
+  var cols = ['em','board','sprintName','sprintStatus','fy','quarter','sprint','issues','totalSP','doneSP','pendingSP','spRes','velocity','unplannedPct'];
   var csv = cols.join(',') + '\n';
   var exportData = FILTERED.length ? FILTERED : ACTIVE_SPRINTS;
   exportData.forEach(function(d){
