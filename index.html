@@ -472,6 +472,12 @@ tr.ticket-col-hdr.hidden{display:none;}
 .cap-epic-legend-item{display:flex;align-items:center;gap:3px;font-size:9px;color:var(--muted);white-space:nowrap;}
 .cap-epic-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;}
 .cap-epic-legend-more{color:var(--muted2);font-style:italic;}
+.rjt-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:24px 16px;height:100%;text-align:center;}
+.rjt-empty-icon{font-size:28px;opacity:.45;}
+.rjt-empty-title{font-size:11px;font-weight:600;color:var(--fg);}
+.rjt-empty-msg{font-size:11px;color:var(--muted);line-height:1.5;}
+.rjt-chips{display:flex;flex-wrap:wrap;gap:5px;justify-content:center;margin:2px 0;}
+.rjt-chip{font-size:10px;padding:3px 9px;border-radius:12px;background:var(--surface2,#f1f5f9);color:var(--muted);border:1px solid var(--border);white-space:nowrap;}
 </style>
 </head>
 <body>
@@ -593,7 +599,7 @@ tr.ticket-col-hdr.hidden{display:none;}
       <div class="chart-wrap" id="chart-epic-wrap"><canvas id="chart-velocity"></canvas></div>
     </div>
     <div class="chart-card">
-      <h3>Effort Mix <span class="sub">Issue breakdown by work type</span></h3>
+      <h3>Request Justification Type <span class="sub">Why was this work requested?</span></h3>
       <div class="chart-wrap" id="chart-effort-wrap"><canvas id="chart-effort"></canvas></div>
     </div>
     <div class="chart-card">
@@ -2356,76 +2362,20 @@ function renderVelocityChart(canvasId) {
 }
 
 function renderEffortChart() {
-  var source = FILTERED.length ? FILTERED : ACTIVE_SPRINTS;
-  var totals = {};
-  var grandTotal = 0;
-  source.forEach(function(d) {
-    var n = d.issues || 0;
-    grandTotal += n;
-    var eb = d.effortBreakdown || {};
-    Object.keys(eb).forEach(function(k) {
-      totals[k] = (totals[k] || 0) + Math.round((eb[k] / 100) * n);
-    });
-  });
-  if (!Object.keys(totals).length && grandTotal > 0) totals['Feature'] = grandTotal;
-
-  var ORDER = ['Feature', 'Intake', 'KTLO', 'AppSec', 'Tech Debt', 'Bug'];
-  var keys = ORDER.filter(function(k){ return totals[k]; }).concat(
-    Object.keys(totals).filter(function(k){ return ORDER.indexOf(k) === -1; })
-  );
-  var COLORS = {'Feature':'#3b82f6','Intake':'#f59e0b','KTLO':'#8b5cf6','AppSec':'#ef4444','Tech Debt':'#eab308','Bug':'#f97316'};
-  var total  = keys.reduce(function(s,k){ return s+(totals[k]||0); }, 0) || 1;
-  var data   = keys.map(function(k){ return totals[k]||0; });
-  var colors = keys.map(function(k){ return COLORS[k]||'#94a3b8'; });
-
-  var ctx = document.getElementById('chart-effort');
-  if (!ctx) return;
   destroyChart('chart-effort');
-
   var wrap = document.getElementById('chart-effort-wrap');
-  var oldLegend = wrap ? wrap.querySelector('.effort-legend') : null;
-  if (oldLegend) oldLegend.remove();
-  // Rebuild canvas wrap (same pattern as SP by Epic)
-  var existingWrap = ctx.parentElement;
-  if (existingWrap && existingWrap !== wrap) {
-    wrap.insertBefore(ctx, existingWrap);
-    existingWrap.remove();
-  }
-  if (wrap) wrap.style.cssText = 'display:flex;align-items:flex-start;gap:16px;height:220px;';
-
-  var canvasWrap = document.createElement('div');
-  canvasWrap.style.cssText = 'flex:0 0 160px;height:160px;position:relative;align-self:center;';
-  ctx.parentNode.insertBefore(canvasWrap, ctx);
-  canvasWrap.appendChild(ctx);
-  ctx.style.cssText = 'display:block;width:160px;height:160px;';
-
-  CHARTS['chart-effort'] = new Chart(ctx, {
-    type: 'doughnut',
-    data: { labels: keys, datasets: [{ data: data, backgroundColor: colors, borderWidth: 2, borderColor: '#fff', hoverOffset: 6 }] },
-    options: {
-      responsive: false, maintainAspectRatio: false, cutout: '62%',
-      plugins: {
-        legend: { display: false },
-        tooltip: { callbacks: { label: function(item) {
-          return ' ' + item.raw + ' issues  (' + Math.round(item.raw/total*100) + '%)';
-        }}}
-      }
-    }
-  });
-
-  var legend = document.createElement('div');
-  legend.className = 'effort-legend';
-  legend.style.cssText = 'flex:1;min-width:0;overflow-y:auto;max-height:220px;display:flex;flex-direction:column;gap:6px;justify-content:center;padding:4px 0;';
-  keys.forEach(function(k, i) {
-    var pct = Math.round(data[i]/total*100);
-    var row = document.createElement('div');
-    row.style.cssText = 'display:flex;align-items:center;gap:7px;font-size:11px;line-height:1.4;';
-    row.innerHTML = '<span style="flex:0 0 10px;height:10px;border-radius:2px;background:'+colors[i]+';display:inline-block;"></span>'+
-      '<span style="flex:1;color:var(--text);">'+k+'</span>'+
-      '<span style="flex:0 0 auto;color:var(--muted);font-weight:600;">'+pct+'%</span>';
-    legend.appendChild(row);
-  });
-  if (wrap) wrap.appendChild(legend);
+  if (!wrap) return;
+  wrap.style.cssText = '';
+  wrap.innerHTML =
+    '<div class="rjt-empty">' +
+      '<div class="rjt-empty-icon">&#127991;</div>' +
+      '<div class="rjt-empty-title">Planned categories</div>' +
+      '<div class="rjt-chips">' +
+        ['ELT (sponsor)', 'Contractual / Legal', 'Product / Business priority change', 'Technical request', 'New future work']
+          .map(function(c){ return '<span class="rjt-chip">'+c+'</span>'; }).join('') +
+      '</div>' +
+      '<div class="rjt-empty-msg">Tag tickets in Jira with one of the labels above<br>to populate this chart on the next sync.</div>' +
+    '</div>';
 }
 
 var CAPACITY_DEFAULT_SP = 10;

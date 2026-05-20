@@ -166,13 +166,13 @@ function buildEffortBreakdown(issues) {
   const counts = {};
   issues.forEach(i => {
     const labels = i.fields?.labels || [];
-    const type = labels.includes('Intake')    ? 'Intake'
-               : labels.includes('KTLO')      ? 'KTLO'
-               : labels.includes('AppSec')    ? 'AppSec'
-               : labels.includes('TechDebt')  ? 'Tech Debt'
-               : labels.includes('Bug')       ? 'Bug'
-               : 'Feature';
-    counts[type] = (counts[type] || 0) + 1;
+    const type = labels.includes('ELT')             ? 'ELT (sponsor)'
+               : labels.includes('Contractual')     ? 'Contractual / Legal'
+               : labels.includes('ProductPriority') ? 'Product / Business priority change'
+               : labels.includes('TechRequest')     ? 'Technical request'
+               : labels.includes('NewFutureWork')   ? 'New future work'
+               : null;
+    if (type) counts[type] = (counts[type] || 0) + 1;
   });
   const total = issues.length || 1;
   return Object.fromEntries(
