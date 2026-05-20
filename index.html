@@ -244,7 +244,16 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-s
 .bc-meta{display:flex;justify-content:space-between;font-size:10px;color:var(--muted);}
 .bc-sprint{font-size:10px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .bc-dates{font-size:9px;color:var(--muted2);margin-top:2px;letter-spacing:.2px;}
-.bc-status{margin-top:5px;}
+.bc-status{display:inline-flex;align-items:center;gap:5px;margin-top:4px;font-size:9px;font-weight:600;letter-spacing:.3px;text-transform:uppercase;color:var(--muted);}
+.bc-status-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;}
+.bc-status.active .bc-status-dot{background:var(--green);}
+.bc-status.active{color:var(--green);}
+.bc-status.future .bc-status-dot{background:var(--accent);}
+.bc-status.future{color:var(--accent);}
+.bc-status.closed .bc-status-dot{background:var(--muted2);}
+.bc-reports{display:flex;gap:8px;margin-top:5px;}
+.bc-report-link{font-size:9px;color:var(--muted);text-decoration:none;letter-spacing:.2px;opacity:.8;}
+.bc-report-link:hover{color:var(--accent);opacity:1;text-decoration:underline;}
 .bc-goal-toggle{font-size:9px;font-weight:600;color:var(--accent);cursor:pointer;display:inline-flex;align-items:center;gap:3px;margin-top:6px;user-select:none;letter-spacing:.3px;text-transform:uppercase;}
 .bc-goal-toggle .bc-goal-arrow{display:inline-block;transition:transform .2s;font-style:normal;}
 .bc-goal-body{font-size:10px;color:var(--muted);font-style:italic;line-height:1.5;margin-top:4px;display:none;}
@@ -2147,9 +2156,34 @@ function renderBoardHealthGrid(containerId) {
 
   var STATUS_LABELS_CARD = {active:'Active', future:'Future', closed:'Closed', none:'No Sprint'};
 
+  // Numeric Jira board IDs — required for /reports/sprint and /reports/velocity URLs.
+  // Boards without an ID fall back to the plain /boards link.
+  var BOARD_IDS = {
+    FC:    1026,
+    CSS:   null,
+    CEGEO: null,
+    QAS:   9062,
+    TSC:   null,
+    MSV:   null,
+    RPS:   null,
+    FIND:  null,
+    TCET:  null,
+    CON:   null,
+    LHAPI: null,
+    TLCC:  null,
+    QUA:   null,
+  };
+
+  function boardBaseUrl(board) {
+    var id = BOARD_IDS[board];
+    var base = 'https://moveinc.atlassian.net/jira/software/projects/' + board + '/boards';
+    return id ? base + '/' + id : base;
+  }
+
   el.innerHTML = data.map(function(d){
     // Stub card for boards with no active sprint when status=active filter is on
     if (d._noActiveSprint) {
+      var base = boardBaseUrl(d.board);
       return '<div class="board-card health-none">' +
         '<div class="bc-header">' +
           '<div><div class="bc-name">' + d.board + '</div><div class="bc-em">' + d.em + '</div></div>' +
@@ -2158,6 +2192,9 @@ function renderBoardHealthGrid(containerId) {
         '<div class="bc-bar"><div class="bc-bar-fill" style="width:0%;background:var(--muted)"></div></div>' +
         '<div class="bc-meta"><span>— SP</span><span>—</span></div>' +
         '<div class="bc-sprint" style="font-style:italic;">No active sprint</div>' +
+        '<div class="bc-reports">' +
+          '<a class="bc-report-link" href="' + base + '/reports/velocity" target="_blank">↗ Velocity</a>' +
+        '</div>' +
       '</div>';
     }
     var hasWork = d.issues > 0 || d.totalSP > 0;
@@ -2169,8 +2206,14 @@ function renderBoardHealthGrid(containerId) {
     var sprintLabel = isNone
       ? (d._sprintCount > 1 ? d._sprintCount + ' sprints · no work planned' : 'No work planned')
       : (d._multiSprint ? d._multiSprint : d.sprintName);
-    // Show status pill only on single-sprint cards where it adds information
-    var showStatusPill = !d._multiSprint && d.sprintStatus && d.sprintStatus !== 'none';
+    var showStatus = !d._multiSprint && d.sprintStatus && d.sprintStatus !== 'none';
+    var statusLabel = STATUS_LABELS_CARD[d.sprintStatus] || d.sprintStatus;
+    var base = boardBaseUrl(d.board);
+    // Sprint report link points to the specific sprint by name via JQL (no numeric sprint ID needed)
+    var sprintReportUrl = BOARD_IDS[d.board]
+      ? base + '/reports/sprint'
+      : 'https://moveinc.atlassian.net/issues/?jql=' + encodeURIComponent('project = ' + d.board + ' AND sprint = "' + d.sprintName + '" ORDER BY status ASC');
+    var velocityUrl = base + '/reports/velocity';
     return '<div class="board-card health-' + hc + '">' +
       '<div class="bc-header">' +
         '<div><div class="bc-name">' + d.board + '</div><div class="bc-em">' + d.em + '</div></div>' +
@@ -2183,7 +2226,11 @@ function renderBoardHealthGrid(containerId) {
       '</div>' +
       '<div class="bc-sprint">' + sprintLabel + '</div>' +
       ((!isNone && d.startDate && !d._multiSprint) ? '<div class="bc-dates">' + d.startDate + ' → ' + (d.endDate || '?') + '</div>' : '') +
-      (showStatusPill ? '<div class="bc-status"><span class="pill ' + d.sprintStatus + '"><span class="pill-dot"></span>' + (STATUS_LABELS_CARD[d.sprintStatus] || d.sprintStatus) + '</span></div>' : '') +
+      (showStatus ? '<div class="bc-status ' + d.sprintStatus + '"><span class="bc-status-dot"></span>' + statusLabel + '</div>' : '') +
+      (!d._multiSprint ? '<div class="bc-reports">' +
+        '<a class="bc-report-link" href="' + sprintReportUrl + '" target="_blank">↗ Sprint</a>' +
+        '<a class="bc-report-link" href="' + velocityUrl + '" target="_blank">↗ Velocity</a>' +
+      '</div>' : '') +
       ((!isNone && d.sprintGoal && !d._multiSprint) ? '<span class="bc-goal-toggle" onclick="toggleGoal(this)"><span class="bc-goal-arrow">▶</span> Sprint Goal</span><div class="bc-goal-body">' + d.sprintGoal + '</div>' : '') +
     '</div>';
   }).join('');
