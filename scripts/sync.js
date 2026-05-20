@@ -217,21 +217,21 @@ const METRICS_RE = /, issues:\d+(?:\.\d+)?, totalSP:\d+(?:\.\d+)?, doneSP:\d+(?:
 // Uses a non-greedy match inside brackets; works because each row is a single line.
 const PAYLOAD_RE = /, epicBreakdown:\[.*?\], effortBreakdown:\{[^}]*\}(?:, _hasStatusBreakdown:true)?(?:, ticketsPerDev:\[.*?\])?(?=\})/;
 
-// Extract sprint name from customfield_10020 (array of sprint objects)
-function getSprintName(issue) {
+// Extract the sprint name matching the expected state from customfield_10020.
+// An issue can belong to multiple sprints (e.g. carried over from a closed one);
+// we always want the sprint whose state matches what we fetched.
+function getSprintNameForState(issue, targetState) {
   const sprints = issue.fields?.customfield_10020;
   if (!Array.isArray(sprints) || !sprints.length) return null;
-  // Prefer closed, then active, then future
-  const order = { closed: 0, active: 1, future: 2 };
-  const sorted = [...sprints].sort((a, b) => (order[a.state] ?? 9) - (order[b.state] ?? 9));
-  return sorted[0]?.name || null;
+  const match = sprints.find(s => s.state === targetState);
+  return (match || sprints[0])?.name || null;
 }
 
-// Group issues by sprint name
-function groupBySprint(issues) {
+// Group issues by sprint name, using the target state to pick the right sprint
+function groupBySprint(issues, targetState) {
   const map = {};
   issues.forEach(issue => {
-    const name = getSprintName(issue);
+    const name = getSprintNameForState(issue, targetState);
     if (!name) return;
     if (!map[name]) map[name] = [];
     map[name].push(issue);
@@ -310,7 +310,7 @@ async function main() {
       const issues = await fetchIssues(board, 'futureSprints()');
       if (!issues.length) { console.log('(no future sprint)'); }
       else {
-        const byName = groupBySprint(issues);
+        const byName = groupBySprint(issues, 'future');
         let count = 0;
         for (const [name, sprintIssues] of Object.entries(byName)) {
           const metrics         = calcMetrics(sprintIssues);
@@ -332,7 +332,7 @@ async function main() {
       const issues = await fetchIssues(board, 'closedSprints()');
       if (!issues.length) { console.log('(none)'); }
       else {
-        const byName = groupBySprint(issues);
+        const byName = groupBySprint(issues, 'closed');
         let count = 0;
         for (const [name, sprintIssues] of Object.entries(byName)) {
           const metrics         = calcMetrics(sprintIssues);
