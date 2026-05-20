@@ -304,18 +304,23 @@ async function main() {
       console.log(`FAILED — ${err.message}`);
     }
 
-    // Future sprint
+    // Future sprints — group by sprint name (same as closed) to avoid mixing multiple futures
     process.stdout.write(`  [${board.padEnd(6)}] future... `);
     try {
-      const issues          = await fetchIssues(board, 'futureSprints()');
+      const issues = await fetchIssues(board, 'futureSprints()');
       if (!issues.length) { console.log('(no future sprint)'); }
       else {
-        const metrics         = calcMetrics(issues);
-        const epicBreakdown   = buildEpicBreakdown(issues);
-        const effortBreakdown = buildEffortBreakdown(issues);
-        const ticketsPerDev   = buildTicketsPerDev(issues);
-        html = patchHTML(html, board, 'future', metrics, epicBreakdown, effortBreakdown, ticketsPerDev);
-        console.log(`${String(issues.length).padStart(3)} issues — totalSP:${metrics.totalSP}  (future)`);
+        const byName = groupBySprint(issues);
+        let count = 0;
+        for (const [name, sprintIssues] of Object.entries(byName)) {
+          const metrics         = calcMetrics(sprintIssues);
+          const epicBreakdown   = buildEpicBreakdown(sprintIssues);
+          const effortBreakdown = buildEffortBreakdown(sprintIssues);
+          const ticketsPerDev   = buildTicketsPerDev(sprintIssues);
+          html = patchHTMLBySprintName(html, name, metrics, epicBreakdown, effortBreakdown, ticketsPerDev);
+          count++;
+        }
+        console.log(`${count} future sprints synced`);
       }
     } catch (err) {
       console.log(`FAILED — ${err.message}`);
