@@ -153,6 +153,14 @@ async function fetchIssuesByKeys(keys) {
 
 // ─── Agile API (sprint list) ──────────────────────────────────────────────────
 
+// Only FY26+ sprints are rendered on the dashboard. Pre-FY26 sprints add
+// hundreds of API calls per board (RPS alone has ~250 closed sprints back to
+// FY18) for data we never display. Filter by name pattern.
+const SPRINT_FY_RE = /\bFY(2[6-9]|[3-9]\d)\b/;
+function isSupportedSprint(s) {
+  return s && typeof s.name === 'string' && SPRINT_FY_RE.test(s.name);
+}
+
 // Returns [{id, name, state, startDate, endDate, goal}]
 async function fetchSprintList(boardId, state) {
   let sprints = [], startAt = 0;
@@ -162,7 +170,7 @@ async function fetchSprintList(boardId, state) {
     if (data.isLast || !(data.values || []).length) break;
     startAt += data.values.length;
   }
-  return sprints;
+  return sprints.filter(isSupportedSprint);
 }
 
 // The /board/{id}/sprint list endpoint frequently omits `goal`. Hit the per-sprint
@@ -444,7 +452,7 @@ function groupBySprint(issues, targetState) {
   const map = {};
   issues.forEach(issue => {
     const name = getSprintNameForState(issue, targetState);
-    if (!name) return;
+    if (!name || !SPRINT_FY_RE.test(name)) return;
     if (!map[name]) map[name] = [];
     map[name].push(issue);
   });
