@@ -24,7 +24,9 @@ const path  = require('path');
 const CLOUD_ID         = 'cf0dc8c2-47a8-4929-8d48-2e03205ce9da';
 const JIRA_BASE        = `https://api.atlassian.com/ex/jira/${CLOUD_ID}/rest/api/3`;
 const AGILE_BASE       = `https://api.atlassian.com/ex/jira/${CLOUD_ID}/rest/agile/1.0`;
-const GREENHOPPER_BASE = `https://api.atlassian.com/ex/jira/${CLOUD_ID}/rest/greenhopper/1.0`;
+// Greenhopper is a legacy API only reachable on the direct tenant host (not the
+// api.atlassian.com OAuth proxy).
+const GREENHOPPER_BASE = `https://moveinc.atlassian.net/rest/greenhopper/1.0`;
 const HTML_PATH        = path.join(__dirname, '..', 'index.html');
 
 // boardId = numeric Jira board ID (from the /boards/{id}/reports/velocity URL).
