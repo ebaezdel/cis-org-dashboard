@@ -2209,10 +2209,6 @@ function renderBoardHealthGrid(containerId) {
     var showStatus = !d._multiSprint && d.sprintStatus && d.sprintStatus !== 'none';
     var statusLabel = STATUS_LABELS_CARD[d.sprintStatus] || d.sprintStatus;
     var base = boardBaseUrl(d.board);
-    // Sprint report link points to the specific sprint by name via JQL (no numeric sprint ID needed)
-    var sprintReportUrl = BOARD_IDS[d.board]
-      ? base + '/reports/sprint'
-      : 'https://moveinc.atlassian.net/issues/?jql=' + encodeURIComponent('project = ' + d.board + ' AND sprint = "' + d.sprintName + '" ORDER BY status ASC');
     var velocityUrl = base + '/reports/velocity';
     return '<div class="board-card health-' + hc + '">' +
       '<div class="bc-header">' +
@@ -2221,14 +2217,13 @@ function renderBoardHealthGrid(containerId) {
       '</div>' +
       '<div class="bc-bar"><div class="bc-bar-fill" style="width:' + (isNone ? 0 : Math.min(pct,100)) + '%;background:' + barColor + '"></div></div>' +
       '<div class="bc-meta">' +
-        '<span>' + (isNone ? '0' : d.doneSP) + ' / ' + (isNone ? '—' : d.totalSP) + ' SP</span>' +
+        '<span>' + (isNone ? '— SP' : 'Committed ' + d.committedSP + ' SP · Completed ' + d.doneSP + ' SP') + '</span>' +
         '<span>' + (isNone ? '—' : d.issues + ' issues') + '</span>' +
       '</div>' +
       '<div class="bc-sprint">' + sprintLabel + '</div>' +
       ((!isNone && d.startDate && !d._multiSprint) ? '<div class="bc-dates">' + d.startDate + ' → ' + (d.endDate || '?') + '</div>' : '') +
       (showStatus ? '<div class="bc-status ' + d.sprintStatus + '"><span class="bc-status-dot"></span>' + statusLabel + '</div>' : '') +
       (!d._multiSprint ? '<div class="bc-reports">' +
-        '<a class="bc-report-link" href="' + sprintReportUrl + '" target="_blank">↗ Sprint</a>' +
         '<a class="bc-report-link" href="' + velocityUrl + '" target="_blank">↗ Velocity</a>' +
       '</div>' : '') +
       ((!isNone && d.sprintGoal && !d._multiSprint) ? '<span class="bc-goal-toggle" onclick="toggleGoal(this)"><span class="bc-goal-arrow">▶</span> Sprint Goal</span><div class="bc-goal-body">' + d.sprintGoal + '</div>' : '') +

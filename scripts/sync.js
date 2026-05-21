@@ -150,10 +150,24 @@ async function fetchSprintReport(boardId, sprintId) {
   const notCompleted    = c.issuesNotCompletedInCurrentSprint   || [];
   const punted          = c.puntedIssues                        || [];
 
-  // committedSP = initial estimate of completed issues at sprint start (velocity "Commitment")
-  // doneSP      = estimate of completed issues at sprint close (velocity "Completed")
-  const committedSP = r1((c.completedIssuesInitialEstimateSum?.value  ?? 0) +
-                         (c.issuesNotCompletedInitialEstimateSum?.value ?? 0));
+  // Jira's "Commitment" excludes issues added after the sprint started.
+  // Walk every issue that touched the sprint and sum estimateStatistic (which
+  // carries the initial estimate at sprint-start time in the sprint report
+  // payload), skipping anything in issueKeysAddedDuringSprint.
+  const added = new Set(
+    c.issueKeysAddedDuringSprint && typeof c.issueKeysAddedDuringSprint === 'object'
+      ? Object.keys(c.issueKeysAddedDuringSprint)
+      : []
+  );
+  const sumInitial = (arr) => (arr || []).reduce((s, i) => {
+    if (added.has(i.key)) return s;
+    const v = i.estimateStatistic?.statFieldValue?.value;
+    return s + (typeof v === 'number' ? v : 0);
+  }, 0);
+
+  // committedSP = SP on the board at sprint start (velocity "Commitment")
+  // doneSP      = SP of completed issues using current estimates (velocity "Completed")
+  const committedSP = r1(sumInitial(completedIssues) + sumInitial(notCompleted) + sumInitial(punted));
   const doneSP      = r1(c.completedIssuesEstimateSum?.value          ?? 0);
   const pendingSP   = r1(c.issuesNotCompletedEstimateSum?.value        ?? 0);
   const totalSP     = r1(doneSP + pendingSP);
