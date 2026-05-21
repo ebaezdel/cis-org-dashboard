@@ -124,6 +124,33 @@ async function fetchIssuesBySprintName(board, sprintName) {
   return issues;
 }
 
+// Fetch issues by an explicit list of keys (lets us pull tickets that have since
+// been moved out of the sprint — JQL "sprint = X" only returns currently-tagged ones).
+async function fetchIssuesByKeys(keys) {
+  if (!keys.length) return [];
+  const fields = [
+    'summary', 'status', 'assignee', 'issuetype', 'labels',
+    'customfield_10034', 'customfield_10016', 'customfield_10020', 'parent', 'issuelinks',
+  ].join(',');
+  const issues = [];
+  // chunk to avoid 414 URI Too Long
+  for (let i = 0; i < keys.length; i += 80) {
+    const slice = keys.slice(i, i + 80);
+    const jql = encodeURIComponent(`key in (${slice.join(',')})`);
+    let nextPageToken;
+    while (true) {
+      const qs = nextPageToken
+        ? `/search/jql?jql=${jql}&fields=${fields}&maxResults=100&nextPageToken=${encodeURIComponent(nextPageToken)}`
+        : `/search/jql?jql=${jql}&fields=${fields}&maxResults=100`;
+      const data = await jiraGet(qs);
+      issues.push(...(data.issues || []));
+      if (!data.nextPageToken || !(data.issues || []).length) break;
+      nextPageToken = data.nextPageToken;
+    }
+  }
+  return issues;
+}
+
 // ─── Agile API (sprint list) ──────────────────────────────────────────────────
 
 // Returns [{id, name, state, startDate, endDate, goal}]
@@ -139,6 +166,66 @@ async function fetchSprintList(boardId, state) {
 }
 
 // ─── Greenhopper sprint report (velocity-chart-accurate SP numbers) ───────────
+
+// Returns the keys of every issue that touched this sprint plus the snapshot
+// classification (completed at close / not completed / punted / added during).
+// Used by closed-sprint snapshot path so epicBreakdown / ticketsPerDev /
+// statuses reflect the moment the sprint closed, not the live JQL state.
+async function fetchSprintSnapshot(boardId, sprintId) {
+  const r = await greenphopper(`/rapid/charts/sprintreport?rapidViewId=${boardId}&sprintId=${sprintId}`);
+  const c = r.contents || {};
+  const completed    = (c.completedIssues || []).map(i => i.key);
+  const notCompleted = (c.issuesNotCompletedInCurrentSprint || []).map(i => i.key);
+  const punted       = (c.puntedIssues || []).map(i => i.key);
+  const added        = c.issueKeysAddedDuringSprint && typeof c.issueKeysAddedDuringSprint === 'object'
+    ? new Set(Object.keys(c.issueKeysAddedDuringSprint))
+    : new Set();
+
+  // Per-issue snapshot SP at sprint start (estimateStatistic = initial).
+  const initialSP = {};
+  // Per-issue snapshot status name and category at the time of close.
+  const snapStatus = {};
+  for (const arr of [c.completedIssues, c.issuesNotCompletedInCurrentSprint, c.puntedIssues]) {
+    (arr || []).forEach(i => {
+      const v = i.estimateStatistic?.statFieldValue?.value;
+      if (typeof v === 'number') initialSP[i.key] = v;
+      if (i.statusName) snapStatus[i.key] = { name: i.statusName, category: i.statusCategory || '' };
+      else if (i.status?.name) snapStatus[i.key] = { name: i.status.name, category: i.status.statusCategory?.key || '' };
+    });
+  }
+
+  // Issues that count toward the snapshot of this sprint (everything except
+  // mid-sprint additions — those are excluded from velocity chart).
+  const allKeys = [...completed, ...notCompleted, ...punted].filter(k => !added.has(k));
+
+  return { contents: c, completed, notCompleted, punted, added, initialSP, snapStatus, allKeys };
+}
+
+// Apply the Greenhopper snapshot onto a Jira-issue list so closed-sprint
+// breakdowns/statuses reflect sprint-close state, not today's live state.
+function applySnapshotToIssues(issues, snap) {
+  const completedSet = new Set(snap.completed);
+  const puntedSet    = new Set(snap.punted);
+  return issues
+    // drop anything that was added mid-sprint — velocity chart ignores them
+    .filter(i => !snap.added.has(i.key))
+    .map(i => {
+      const f = { ...i.fields };
+      const ss = snap.snapStatus[i.key];
+      if (ss) {
+        const cat = completedSet.has(i.key) ? 'done'
+                  : puntedSet.has(i.key)    ? 'new'
+                  :                            (ss.category || 'indeterminate');
+        f.status = { ...(f.status || {}), name: ss.name, statusCategory: { key: cat } };
+      }
+      // override SP with snapshot initial estimate so per-ticket SP matches velocity
+      const initSP = snap.initialSP[i.key];
+      if (typeof initSP === 'number') {
+        f.customfield_10034 = initSP;
+      }
+      return { ...i, fields: f };
+    });
+}
 
 // Returns metrics matching exactly what the Jira velocity chart shows.
 // For active sprints: live current state. For closed: locked snapshot at close.
@@ -171,7 +258,10 @@ async function fetchSprintReport(boardId, sprintId) {
   const doneSP      = r1(c.completedIssuesEstimateSum?.value          ?? 0);
   const pendingSP   = r1(c.issuesNotCompletedEstimateSum?.value        ?? 0);
   const totalSP     = r1(doneSP + pendingSP);
-  const issues      = completedIssues.length + notCompleted.length + punted.length;
+  // Issue count excludes mid-sprint adds (matches velocity chart denominator).
+  const issues      = completedIssues.filter(i => !added.has(i.key)).length
+                    + notCompleted.filter(i => !added.has(i.key)).length
+                    + punted.filter(i => !added.has(i.key)).length;
   const spRes       = pct(doneSP, committedSP);
 
   return {
@@ -503,7 +593,7 @@ async function main() {
       }
     } catch (err) { console.log(`FAILED — ${err.message}`); }
 
-    // Closed sprints
+    // Closed sprints — full snapshot from Greenhopper (immutable, matches velocity chart)
     process.stdout.write(`  [${board.padEnd(6)}] closed... `);
     try {
       const closedSprints = await fetchSprintList(boardId, 'closed');
@@ -512,8 +602,13 @@ async function main() {
       } else {
         let count = 0;
         for (const sprint of closedSprints) {
+          const snap            = await fetchSprintSnapshot(boardId, sprint.id);
           const metrics         = await fetchSprintReport(boardId, sprint.id);
-          const issues          = await fetchIssuesBySprintName(board, sprint.name);
+          // Pull every issue that was in the sprint at close — by key, not by
+          // current-sprint-membership, so reassignments after close don't
+          // change what we render.
+          const rawIssues       = await fetchIssuesByKeys(snap.allKeys);
+          const issues          = applySnapshotToIssues(rawIssues, snap);
           const epicBreakdown   = buildEpicBreakdown(issues);
           const effortBreakdown = buildEffortBreakdown(issues);
           const ticketsPerDev   = buildTicketsPerDev(issues);
