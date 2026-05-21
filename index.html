@@ -242,19 +242,21 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-s
 .bc-bar{height:4px;background:var(--surface2);border-radius:2px;margin:6px 0;overflow:hidden;}
 .bc-bar-fill{height:100%;border-radius:2px;transition:width .5s;}
 .bc-meta{display:flex;justify-content:space-between;font-size:10px;color:var(--muted);}
-.bc-sprint{font-size:10px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.bc-dates{font-size:9px;color:var(--muted2);margin-top:2px;letter-spacing:.2px;}
-.bc-status{display:inline-flex;align-items:center;gap:5px;margin-top:4px;font-size:9px;font-weight:600;letter-spacing:.3px;text-transform:uppercase;color:var(--muted);}
+.bc-info{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-top:6px;font-size:10px;color:var(--muted);}
+.bc-info .bc-sprint{font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;}
+.bc-info .bc-dates{color:var(--muted2);font-size:9px;letter-spacing:.2px;}
+.bc-info .bc-sep{color:var(--muted2);opacity:.5;}
+.bc-status{display:inline-flex;align-items:center;gap:5px;font-size:9px;font-weight:600;letter-spacing:.3px;text-transform:uppercase;color:var(--muted);}
 .bc-status-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;}
 .bc-status.active .bc-status-dot{background:var(--green);}
 .bc-status.active{color:var(--green);}
 .bc-status.future .bc-status-dot{background:var(--accent);}
 .bc-status.future{color:var(--accent);}
 .bc-status.closed .bc-status-dot{background:var(--muted2);}
-.bc-reports{display:flex;gap:8px;margin-top:5px;}
+.bc-actions{display:flex;align-items:center;gap:10px;margin-top:6px;}
 .bc-report-link{font-size:9px;color:var(--muted);text-decoration:none;letter-spacing:.2px;opacity:.8;}
 .bc-report-link:hover{color:var(--accent);opacity:1;text-decoration:underline;}
-.bc-goal-toggle{font-size:9px;font-weight:600;color:var(--accent);cursor:pointer;display:inline-flex;align-items:center;gap:3px;margin-top:6px;user-select:none;letter-spacing:.3px;text-transform:uppercase;}
+.bc-goal-toggle{font-size:9px;font-weight:600;color:var(--accent);cursor:pointer;display:inline-flex;align-items:center;gap:3px;user-select:none;letter-spacing:.3px;text-transform:uppercase;}
 .bc-goal-toggle .bc-goal-arrow{display:inline-block;transition:transform .2s;font-style:normal;}
 .bc-goal-body{font-size:10px;color:var(--muted);font-style:italic;line-height:1.5;margin-top:4px;display:none;}
 .bc-goal-body.open{display:block;}
@@ -2220,13 +2222,16 @@ function renderBoardHealthGrid(containerId) {
         '<span>' + (isNone ? '— SP' : 'Committed ' + d.committedSP + ' SP · Completed ' + d.doneSP + ' SP') + '</span>' +
         '<span>' + (isNone ? '—' : d.issues + ' issues') + '</span>' +
       '</div>' +
-      '<div class="bc-sprint">' + sprintLabel + '</div>' +
-      ((!isNone && d.startDate && !d._multiSprint) ? '<div class="bc-dates">' + d.startDate + ' → ' + (d.endDate || '?') + '</div>' : '') +
-      (showStatus ? '<div class="bc-status ' + d.sprintStatus + '"><span class="bc-status-dot"></span>' + statusLabel + '</div>' : '') +
-      (!d._multiSprint ? '<div class="bc-reports">' +
-        '<a class="bc-report-link" href="' + velocityUrl + '" target="_blank">↗ Velocity</a>' +
+      '<div class="bc-info">' +
+        '<span class="bc-sprint">' + sprintLabel + '</span>' +
+        ((!isNone && d.startDate && !d._multiSprint) ? '<span class="bc-sep">·</span><span class="bc-dates">' + d.startDate + ' → ' + (d.endDate || '?') + '</span>' : '') +
+        (showStatus ? '<span class="bc-sep">·</span><span class="bc-status ' + d.sprintStatus + '"><span class="bc-status-dot"></span>' + statusLabel + '</span>' : '') +
+      '</div>' +
+      ((!d._multiSprint && (d.sprintGoal || !isNone)) ? '<div class="bc-actions">' +
+        ((!isNone && d.sprintGoal) ? '<span class="bc-goal-toggle" onclick="toggleGoal(this)"><span class="bc-goal-arrow">▶</span> Sprint Goal</span>' : '') +
+        (!d._multiSprint ? '<a class="bc-report-link" href="' + velocityUrl + '" target="_blank">↗ Velocity</a>' : '') +
       '</div>' : '') +
-      ((!isNone && d.sprintGoal && !d._multiSprint) ? '<span class="bc-goal-toggle" onclick="toggleGoal(this)"><span class="bc-goal-arrow">▶</span> Sprint Goal</span><div class="bc-goal-body">' + d.sprintGoal + '</div>' : '') +
+      ((!isNone && d.sprintGoal && !d._multiSprint) ? '<div class="bc-goal-body">' + d.sprintGoal + '</div>' : '') +
     '</div>';
   }).join('');
 }
