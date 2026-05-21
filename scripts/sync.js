@@ -165,6 +165,17 @@ async function fetchSprintList(boardId, state) {
   return sprints;
 }
 
+// The /board/{id}/sprint list endpoint frequently omits `goal`. Hit the per-sprint
+// endpoint for the authoritative goal text.
+async function fetchSprintGoal(sprintId) {
+  try {
+    const s = await agileGet(`/sprint/${sprintId}`);
+    return typeof s.goal === 'string' ? s.goal : '';
+  } catch (e) {
+    return '';
+  }
+}
+
 // ─── Greenhopper sprint report (velocity-chart-accurate SP numbers) ───────────
 
 // Returns the keys of every issue that touched this sprint plus the snapshot
@@ -567,7 +578,8 @@ async function main() {
         const epicBreakdown   = buildEpicBreakdown(issues);
         const effortBreakdown = buildEffortBreakdown(issues);
         const ticketsPerDev   = buildTicketsPerDev(issues);
-        html = patchHTMLBySprintName(html, sprint.name, 'active', metrics, epicBreakdown, effortBreakdown, ticketsPerDev, sprint.goal || null);
+        const goal            = sprint.goal || await fetchSprintGoal(sprint.id);
+        html = patchHTMLBySprintName(html, sprint.name, 'active', metrics, epicBreakdown, effortBreakdown, ticketsPerDev, goal);
         console.log(`${String(metrics.issues).padStart(3)} issues — committedSP:${metrics.committedSP}  doneSP:${metrics.doneSP}  (${metrics.spRes}%)`);
       }
     } catch (err) { console.log(`FAILED — ${err.message}`); }
@@ -586,7 +598,8 @@ async function main() {
           const epicBreakdown   = buildEpicBreakdown(issues);
           const effortBreakdown = buildEffortBreakdown(issues);
           const ticketsPerDev   = buildTicketsPerDev(issues);
-          html = patchHTMLBySprintName(html, sprint.name, 'future', metrics, epicBreakdown, effortBreakdown, ticketsPerDev, sprint.goal || null);
+          const goal            = sprint.goal || await fetchSprintGoal(sprint.id);
+          html = patchHTMLBySprintName(html, sprint.name, 'future', metrics, epicBreakdown, effortBreakdown, ticketsPerDev, goal);
           count++;
         }
         console.log(`${count} future sprints synced`);
@@ -612,7 +625,8 @@ async function main() {
           const epicBreakdown   = buildEpicBreakdown(issues);
           const effortBreakdown = buildEffortBreakdown(issues);
           const ticketsPerDev   = buildTicketsPerDev(issues);
-          html = patchHTMLBySprintName(html, sprint.name, 'closed', metrics, epicBreakdown, effortBreakdown, ticketsPerDev, sprint.goal || null);
+          const goal            = sprint.goal || await fetchSprintGoal(sprint.id);
+          html = patchHTMLBySprintName(html, sprint.name, 'closed', metrics, epicBreakdown, effortBreakdown, ticketsPerDev, goal);
           count++;
         }
         console.log(`${count} closed sprints synced`);

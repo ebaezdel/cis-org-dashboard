@@ -2227,11 +2227,11 @@ function renderBoardHealthGrid(containerId) {
         ((!isNone && d.startDate && !d._multiSprint) ? '<span class="bc-sep">·</span><span class="bc-dates">' + d.startDate + ' → ' + (d.endDate || '?') + '</span>' : '') +
         (showStatus ? '<span class="bc-sep">·</span><span class="bc-status ' + d.sprintStatus + '"><span class="bc-status-dot"></span>' + statusLabel + '</span>' : '') +
       '</div>' +
-      ((!d._multiSprint && (d.sprintGoal || !isNone)) ? '<div class="bc-actions">' +
-        ((!isNone && d.sprintGoal) ? '<span class="bc-goal-toggle" onclick="toggleGoal(this)"><span class="bc-goal-arrow">▶</span> Sprint Goal</span>' : '') +
-        (!d._multiSprint ? '<a class="bc-report-link" href="' + velocityUrl + '" target="_blank">↗ Velocity</a>' : '') +
+      (!d._multiSprint ? '<div class="bc-actions">' +
+        ((!isNone && d.sprintGoal && d.sprintGoal !== '—') ? '<span class="bc-goal-toggle" onclick="toggleGoal(this)"><span class="bc-goal-arrow">▶</span> Sprint Goal</span>' : '') +
+        '<a class="bc-report-link" href="' + velocityUrl + '" target="_blank">↗ Velocity</a>' +
       '</div>' : '') +
-      ((!isNone && d.sprintGoal && !d._multiSprint) ? '<div class="bc-goal-body">' + d.sprintGoal + '</div>' : '') +
+      ((!isNone && d.sprintGoal && d.sprintGoal !== '—' && !d._multiSprint) ? '<div class="bc-goal-body">' + d.sprintGoal + '</div>' : '') +
     '</div>';
   }).join('');
 }
