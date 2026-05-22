@@ -459,7 +459,7 @@ function groupBySprint(issues, targetState) {
   return map;
 }
 
-function patchHTMLBySprintName(html, sprintName, sprintStatus, m, epicBreakdown, effortBreakdown, ticketsPerDev, sprintGoal) {
+function patchHTMLBySprintName(html, sprintName, sprintStatus, m, epicBreakdown, effortBreakdown, ticketsPerDev, sprintGoal, board, em, startDate, endDate) {
   const metricsRepl      = `, issues:${m.issues}, totalSP:${m.totalSP}, doneSP:${m.doneSP}, pendingSP:${m.pendingSP}, inProgressSP:${m.inProgressSP}, committedSP:${m.committedSP}$1, spRes:${m.spRes}, velocity:${m.velocity}`;
   const payloadRepl      = `, epicBreakdown:${serializeEpicBreakdown(epicBreakdown)}, effortBreakdown:${serializeObj(effortBreakdown)}, _hasStatusBreakdown:true, ticketsPerDev:${serializeTicketsPerDev(ticketsPerDev)}`;
   const sprintStatusRepl = `sprintStatus:'${sprintStatus}'`;
@@ -477,8 +477,68 @@ function patchHTMLBySprintName(html, sprintName, sprintStatus, m, epicBreakdown,
     return updated;
   });
 
-  if (!found) process.stderr.write(`[WARN] No row found for sprintName:'${sprintName}'\n`);
+  if (found) return result.join('\n');
+
+  // Row didn't exist — build and append a fresh row before the array terminator.
+  if (!board || !em) {
+    process.stderr.write(`[WARN] No row found and insufficient metadata to create sprintName:'${sprintName}'\n`);
+    return result.join('\n');
+  }
+  const newRow = buildNewSprintRow({
+    sprintName, sprintStatus, board, em,
+    startDate: startDate || '',
+    endDate:   endDate   || '',
+    sprintGoal: sprintGoal || '',
+    metrics:   m,
+    epicBreakdown, effortBreakdown, ticketsPerDev,
+  });
+  const inserted = insertRowIntoArray(result, newRow);
+  if (inserted.changed) {
+    process.stdout.write(`[INFO] Inserted new row for sprintName:'${sprintName}'\n`);
+    return inserted.lines.join('\n');
+  }
+  process.stderr.write(`[WARN] Could not insert new row for sprintName:'${sprintName}' — ALL_SPRINTS_FY26 terminator not found\n`);
   return result.join('\n');
+}
+
+// Parse a sprint name like 'FC.FY26.Q4.S22' or 'TL-QAS.FY26.Q4S23' into
+// {fy, quarter, sprintNum}. Returns blanks rather than null so the row still
+// renders if the format is unusual.
+function parseSprintMetadata(sprintName) {
+  const m = sprintName.match(/FY(\d{2})/);
+  const q = sprintName.match(/Q(\d)/);
+  const s = sprintName.match(/S(\d+)/);
+  return {
+    fy:        m ? `FY${m[1]}` : '',
+    quarter:   q ? `Q${q[1]}`  : '',
+    sprintNum: s ? Number(s[1]) : 0,
+  };
+}
+
+function buildNewSprintRow(opts) {
+  const meta = parseSprintMetadata(opts.sprintName);
+  const m    = opts.metrics;
+  const startStr = opts.startDate ? opts.startDate.slice(0, 10) : '';
+  const endStr   = opts.endDate   ? opts.endDate.slice(0, 10)   : '';
+  return `  {em:${jsStr(opts.em)}, board:${jsStr(opts.board)}, sprintName:${jsStr(opts.sprintName)}, sprintGoal:${jsStr(opts.sprintGoal)}, sprintStatus:'${opts.sprintStatus}', startDate:${jsStr(startStr)}, endDate:${jsStr(endStr)}, fy:${jsStr(meta.fy)}, quarter:${jsStr(meta.quarter)}, sprint:${meta.sprintNum}, issues:${m.issues}, totalSP:${m.totalSP}, doneSP:${m.doneSP}, pendingSP:${m.pendingSP}, inProgressSP:${m.inProgressSP}, committedSP:${m.committedSP}, spRes:${m.spRes}, velocity:${m.velocity}, unplannedPct:0, plannedPct:100, deltaSP:0, backlogSprints:0, epicBreakdown:${serializeEpicBreakdown(opts.epicBreakdown)}, effortBreakdown:${serializeObj(opts.effortBreakdown)}, _hasStatusBreakdown:true, ticketsPerDev:${serializeTicketsPerDev(opts.ticketsPerDev)}},`;
+}
+
+// Locate the closing `];` of `var ALL_SPRINTS_FY26 = [` and insert the new row
+// just before it. Returns {changed, lines}.
+function insertRowIntoArray(lines, newRow) {
+  let inArray = false;
+  for (let i = 0; i < lines.length; i++) {
+    if (!inArray && /var\s+ALL_SPRINTS_FY26\s*=\s*\[/.test(lines[i])) {
+      inArray = true;
+      continue;
+    }
+    if (inArray && /^\];?\s*$/.test(lines[i])) {
+      const out = lines.slice();
+      out.splice(i, 0, newRow);
+      return { changed: true, lines: out };
+    }
+  }
+  return { changed: false, lines };
 }
 
 function patchHTML(html, board, sprintStatus, m, epicBreakdown, effortBreakdown, ticketsPerDev) {
@@ -514,7 +574,7 @@ async function main() {
 
   let html = fs.readFileSync(HTML_PATH, 'utf8');
 
-  for (const { board, boardId } of BOARDS) {
+  for (const { board, boardId, em } of BOARDS) {
     const hasBoard = boardId != null;
 
     if (!hasBoard) {
@@ -542,7 +602,7 @@ async function main() {
             const epicBreakdown   = buildEpicBreakdown(sprintIssues);
             const effortBreakdown = buildEffortBreakdown(sprintIssues);
             const ticketsPerDev   = buildTicketsPerDev(sprintIssues);
-            html = patchHTMLBySprintName(html, name, 'future', metrics, epicBreakdown, effortBreakdown, ticketsPerDev);
+            html = patchHTMLBySprintName(html, name, 'future', metrics, epicBreakdown, effortBreakdown, ticketsPerDev, '', board, em, '', '');
             count++;
           }
           console.log(`${count} future sprints synced`);
@@ -561,7 +621,7 @@ async function main() {
             const epicBreakdown   = buildEpicBreakdown(sprintIssues);
             const effortBreakdown = buildEffortBreakdown(sprintIssues);
             const ticketsPerDev   = buildTicketsPerDev(sprintIssues);
-            html = patchHTMLBySprintName(html, name, 'closed', metrics, epicBreakdown, effortBreakdown, ticketsPerDev);
+            html = patchHTMLBySprintName(html, name, 'closed', metrics, epicBreakdown, effortBreakdown, ticketsPerDev, '', board, em, '', '');
             count++;
           }
           console.log(`${count} closed sprints synced`);
@@ -587,7 +647,7 @@ async function main() {
         const effortBreakdown = buildEffortBreakdown(issues);
         const ticketsPerDev   = buildTicketsPerDev(issues);
         const goal            = sprint.goal || await fetchSprintGoal(sprint.id);
-        html = patchHTMLBySprintName(html, sprint.name, 'active', metrics, epicBreakdown, effortBreakdown, ticketsPerDev, goal);
+        html = patchHTMLBySprintName(html, sprint.name, 'active', metrics, epicBreakdown, effortBreakdown, ticketsPerDev, goal, board, em, sprint.startDate, sprint.endDate);
         console.log(`${String(metrics.issues).padStart(3)} issues — committedSP:${metrics.committedSP}  doneSP:${metrics.doneSP}  (${metrics.spRes}%)`);
       }
     } catch (err) { console.log(`FAILED — ${err.message}`); }
@@ -607,7 +667,7 @@ async function main() {
           const effortBreakdown = buildEffortBreakdown(issues);
           const ticketsPerDev   = buildTicketsPerDev(issues);
           const goal            = sprint.goal || await fetchSprintGoal(sprint.id);
-          html = patchHTMLBySprintName(html, sprint.name, 'future', metrics, epicBreakdown, effortBreakdown, ticketsPerDev, goal);
+          html = patchHTMLBySprintName(html, sprint.name, 'future', metrics, epicBreakdown, effortBreakdown, ticketsPerDev, goal, board, em, sprint.startDate, sprint.endDate);
           count++;
         }
         console.log(`${count} future sprints synced`);
@@ -634,7 +694,7 @@ async function main() {
           const effortBreakdown = buildEffortBreakdown(issues);
           const ticketsPerDev   = buildTicketsPerDev(issues);
           const goal            = sprint.goal || await fetchSprintGoal(sprint.id);
-          html = patchHTMLBySprintName(html, sprint.name, 'closed', metrics, epicBreakdown, effortBreakdown, ticketsPerDev, goal);
+          html = patchHTMLBySprintName(html, sprint.name, 'closed', metrics, epicBreakdown, effortBreakdown, ticketsPerDev, goal, board, em, sprint.startDate, sprint.endDate);
           count++;
         }
         console.log(`${count} closed sprints synced`);
