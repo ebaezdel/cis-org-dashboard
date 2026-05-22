@@ -260,6 +260,21 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-s
 .bc-goal-toggle .bc-goal-arrow{display:inline-block;transition:transform .2s;font-style:normal;}
 .bc-goal-body{font-size:10px;color:var(--muted);font-style:italic;line-height:1.5;margin-top:4px;display:none;}
 .bc-goal-body.open{display:block;}
+.bc-breakdown{margin-top:6px;display:flex;flex-direction:column;gap:3px;}
+.bc-status-bar{display:flex;height:5px;border-radius:3px;overflow:hidden;background:var(--surface2);}
+.bc-status-bar > span{display:block;height:100%;}
+.bc-status-counts,.bc-type-counts{font-size:9px;color:var(--muted);letter-spacing:.2px;display:flex;flex-wrap:wrap;gap:4px;align-items:center;}
+.bc-status-counts .sep,.bc-type-counts .sep{color:var(--muted2);opacity:.5;}
+.bc-type-counts{color:var(--muted2);}
+.sb-acc{background:#16a34a;}
+.sb-tc{background:#22c55e;}
+.sb-dc{background:#3b82f6;}
+.sb-ip{background:#8b5cf6;}
+.sb-rts{background:#94a3b8;}
+.sb-pa{background:#f59e0b;}
+.sb-blk{background:#ef4444;}
+.sb-cxl{background:#475569;}
+.sb-unk{background:#64748b;}
 
 /* Charts row */
 .charts-row{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px;}
@@ -2608,7 +2623,7 @@ function renderBoardHealthGrid(containerId) {
   var statusRank = {active:3, future:2, closed:1, none:0};
   source.forEach(function(d){
     if (!byBoard[d.board]) {
-      byBoard[d.board] = Object.assign({}, d, {_sprintCount:1});
+      byBoard[d.board] = Object.assign({}, d, {_sprintCount:1, _sourceRows:[d]});
     } else {
       var b = byBoard[d.board];
       b.totalSP   += d.totalSP;
@@ -2616,6 +2631,7 @@ function renderBoardHealthGrid(containerId) {
       b.pendingSP += d.pendingSP;
       b.issues    += d.issues;
       b._sprintCount++;
+      b._sourceRows.push(d);
       if (d.sprint > b.sprint) {
         b.sprint = d.sprint; b.sprintName = d.sprintName;
         b.startDate = d.startDate; b.endDate = d.endDate;
@@ -2651,6 +2667,77 @@ function renderBoardHealthGrid(containerId) {
   if (!data.length) { el.innerHTML = '<p style="color:var(--muted);padding:12px">No data for selected filters.</p>'; return; }
 
   var STATUS_LABELS_CARD = {active:'Active', future:'Future', closed:'Closed', none:'No Sprint'};
+
+  // Canonical status order + abbreviations + bar segment color class.
+  var STATUS_BREAKDOWN = [
+    { name: 'Accepted',             abbr: 'Acc', cls: 'sb-acc' },
+    { name: 'Test Complete',        abbr: 'TC',  cls: 'sb-tc'  },
+    { name: 'Development Complete', abbr: 'DC',  cls: 'sb-dc'  },
+    { name: 'In Progress',          abbr: 'IP',  cls: 'sb-ip'  },
+    { name: 'Ready to Start',       abbr: 'RTS', cls: 'sb-rts' },
+    { name: 'Pending Approval',     abbr: 'PA',  cls: 'sb-pa'  },
+    { name: 'Blocked',              abbr: 'Blk', cls: 'sb-blk' },
+    { name: 'Cancelled',            abbr: 'Cxl', cls: 'sb-cxl' },
+  ];
+  var STATUS_ALIAS = {
+    'Dev Complete': 'Development Complete',
+    'Done':         'Accepted',
+    'To Do':        'Ready to Start',
+    'Acceptance':   'Accepted',
+  };
+
+  function aggregateTickets(rows) {
+    var statusCounts = {};
+    var typeCounts   = {};
+    rows.forEach(function(d) {
+      (d.epicBreakdown || []).forEach(function(epic) {
+        (epic.tickets || []).forEach(function(t) {
+          var s = STATUS_ALIAS[t.status] || t.status || 'Unknown';
+          statusCounts[s] = (statusCounts[s] || 0) + 1;
+          var ty = t.issueType || 'Other';
+          typeCounts[ty] = (typeCounts[ty] || 0) + 1;
+        });
+      });
+    });
+    return { statusCounts: statusCounts, typeCounts: typeCounts };
+  }
+
+  function buildBreakdownHTML(d) {
+    var rows = (d._multiSprint && Array.isArray(d._sourceRows)) ? d._sourceRows : [d];
+    var agg = aggregateTickets(rows);
+    var totalStatus = 0;
+    Object.keys(agg.statusCounts).forEach(function(k){ totalStatus += agg.statusCounts[k]; });
+    if (!totalStatus) return '';
+    var known = {};
+    STATUS_BREAKDOWN.forEach(function(s){ known[s.name] = true; });
+    var unknownTotal = 0;
+    Object.keys(agg.statusCounts).forEach(function(k){ if (!known[k]) unknownTotal += agg.statusCounts[k]; });
+    var segs = STATUS_BREAKDOWN
+      .filter(function(s){ return agg.statusCounts[s.name]; })
+      .map(function(s){
+        var pct = (agg.statusCounts[s.name] / totalStatus * 100).toFixed(2);
+        return '<span class="' + s.cls + '" style="width:' + pct + '%" title="' + s.name + ': ' + agg.statusCounts[s.name] + '"></span>';
+      }).join('');
+    if (unknownTotal) {
+      var pctU = (unknownTotal / totalStatus * 100).toFixed(2);
+      segs += '<span class="sb-unk" style="width:' + pctU + '%" title="Other: ' + unknownTotal + '"></span>';
+    }
+    var statusItems = STATUS_BREAKDOWN
+      .filter(function(s){ return agg.statusCounts[s.name]; })
+      .map(function(s){ return '<span>' + agg.statusCounts[s.name] + ' ' + s.abbr + '</span>'; });
+    if (unknownTotal) statusItems.push('<span>' + unknownTotal + ' ?</span>');
+    var statusRow = statusItems.join('<span class="sep">·</span>');
+    var typeItems = Object.keys(agg.typeCounts)
+      .map(function(k){ return [k, agg.typeCounts[k]]; })
+      .sort(function(a,b){ return b[1]-a[1]; })
+      .map(function(p){ return '<span>' + p[1] + ' ' + p[0] + '</span>'; });
+    var typeRow = typeItems.join('<span class="sep">·</span>');
+    return '<div class="bc-breakdown">' +
+             '<div class="bc-status-bar">' + segs + '</div>' +
+             '<div class="bc-status-counts">' + statusRow + '</div>' +
+             '<div class="bc-type-counts">' + typeRow + '</div>' +
+           '</div>';
+  }
 
   // Numeric Jira board IDs — required for /reports/sprint and /reports/velocity URLs.
   // Boards without an ID fall back to the plain /boards link.
@@ -2716,6 +2803,7 @@ function renderBoardHealthGrid(containerId) {
         '<span>' + (isNone ? '— SP' : 'Committed ' + d.committedSP + ' SP · Completed ' + d.doneSP + ' SP') + '</span>' +
         '<span>' + (isNone ? '—' : d.issues + ' issues') + '</span>' +
       '</div>' +
+      (isNone ? '' : buildBreakdownHTML(d)) +
       '<div class="bc-info">' +
         '<span class="bc-sprint">' + sprintLabel + '</span>' +
         ((!isNone && d.startDate && !d._multiSprint) ? '<span class="bc-sep">·</span><span class="bc-dates">' + d.startDate + ' → ' + (d.endDate || '?') + '</span>' : '') +
