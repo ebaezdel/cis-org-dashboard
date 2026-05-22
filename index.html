@@ -2853,10 +2853,12 @@ function renderSHDTable() {
 }
 
 function toggleGoal(el) {
-  var body = el.nextElementSibling;
+  var actions = el.closest('.bc-actions');
+  var body = actions ? actions.nextElementSibling : el.nextElementSibling;
+  if (!body || !body.classList.contains('bc-goal-body')) return;
   var arrow = el.querySelector('.bc-goal-arrow');
   var open = body.classList.toggle('open');
-  arrow.style.transform = open ? 'rotate(90deg)' : '';
+  if (arrow) arrow.style.transform = open ? 'rotate(90deg)' : '';
 }
 
 function toggleStatusGroup(grpId, hdrRow) {
