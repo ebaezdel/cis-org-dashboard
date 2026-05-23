@@ -524,16 +524,31 @@ function patchHTMLBySprintName(html, sprintName, sprintStatus, m, epicBreakdown,
   return result.join('\n');
 }
 
+// Sprint numbering convention used across CIS boards:
+//   Q1 → S0–S6, Q2 → S7–S12, Q3 → S13–S19, Q4 → S20–S25
+// Some Jira sprint names mis-tag the quarter (e.g. CSS.FY27.Q4.S19 should be
+// Q3.S19). We derive quarter from the sprint number to keep the dashboard
+// dropdown grouping deterministic and consecutive.
+function canonicalQuarterForSprint(n) {
+  if (typeof n !== 'number' || n < 0) return '';
+  if (n <= 6)  return 'Q1';
+  if (n <= 12) return 'Q2';
+  if (n <= 19) return 'Q3';
+  return 'Q4';
+}
+
 // Parse a sprint name like 'FC.FY26.Q4.S22' or 'TL-QAS.FY26.Q4S23' into
 // {fy, quarter, sprintNum}. Returns blanks rather than null so the row still
-// renders if the format is unusual.
+// renders if the format is unusual. Quarter is derived from the sprint number
+// (canonical convention) — NOT from the Q-token in the name, which Jira data
+// sometimes mis-labels.
 function parseSprintMetadata(sprintName) {
   const m = sprintName.match(/FY(\d{2})/);
-  const q = sprintName.match(/Q(\d)/);
   const s = sprintName.match(/S(\d+)/);
+  const sprintNum = s ? Number(s[1]) : 0;
   return {
     fy:        m ? `FY${m[1]}` : '',
-    quarter:   q ? `Q${q[1]}`  : '',
+    quarter:   canonicalQuarterForSprint(sprintNum),
     sprintNum: s ? Number(s[1]) : 0,
   };
 }
@@ -577,14 +592,20 @@ function insertRowIntoArray(lines, newRow) {
 }
 
 // Walk the ALL_SPRINTS_FY26 array, drop any row whose sprintName has already
-// been seen. Cleans up duplicates introduced by the prior bug. Idempotent.
+// been seen, drop sub-FY26 rows and any second occurrence of the same
+// (board, fy, sprintNum) — the latter handles Jira's misnamed sprints (e.g.
+// CSS.FY27.Q3.S19 and CSS.FY27.Q4.S19 are the "same" sprint number per FY).
+// Also rewrites each row's quarter field to the canonical mapping
+// (Q1: S0–S6, Q2: S7–S12, Q3: S13–S19, Q4: S20–S25). Idempotent.
 function dedupeSprintRows(html) {
   const lines = html.split('\n');
   const seen = new Set();
+  const seenBoardFySprint = new Set();
   let inArray = false;
   let dropped = 0;
+  let requartered = 0;
   const out = [];
-  for (const line of lines) {
+  for (let line of lines) {
     if (!inArray && /var\s+ALL_SPRINTS_FY26\s*=\s*\[/.test(line)) {
       inArray = true;
       out.push(line);
@@ -600,11 +621,28 @@ function dedupeSprintRows(html) {
       if (m) {
         if (seen.has(m[1])) { dropped++; continue; }
         seen.add(m[1]);
+        const boardM   = line.match(/board:'([^']+)'/);
+        const fyM      = line.match(/fy:'(FY\d{2})'/);
+        const sprintM  = line.match(/sprint:(\d+)/);
+        if (boardM && fyM && sprintM) {
+          // Drop pre-FY26 sprints (legacy data)
+          const fyNum = Number(fyM[1].slice(2));
+          if (fyNum < 26) { dropped++; continue; }
+          const key = `${boardM[1]}|${fyM[1]}|${sprintM[1]}`;
+          if (seenBoardFySprint.has(key)) { dropped++; continue; }
+          seenBoardFySprint.add(key);
+          // Rewrite quarter to canonical mapping
+          const canonical = canonicalQuarterForSprint(Number(sprintM[1]));
+          const updated = line.replace(/quarter:'Q\d'/, `quarter:'${canonical}'`);
+          if (updated !== line) requartered++;
+          line = updated;
+        }
       }
     }
     out.push(line);
   }
-  if (dropped) console.log(`[INFO] dedupeSprintRows dropped ${dropped} duplicate row(s)`);
+  if (dropped) console.log(`[INFO] dedupeSprintRows dropped ${dropped} duplicate/legacy row(s)`);
+  if (requartered) console.log(`[INFO] dedupeSprintRows requartered ${requartered} row(s) to canonical Q`);
   return out.join('\n');
 }
 
@@ -709,14 +747,12 @@ async function main() {
         console.log('(no active sprint)');
       } else {
         const sprint          = activeSprints[0];
-        const snap            = await fetchSprintSnapshot(boardId, sprint.id);
-        const metrics         = await fetchSprintReport(boardId, sprint.id);
-        // Use snap.allKeys (which now includes issuesCompletedInAnotherSprint
-        // — i.e. cancelled-at-start tickets) instead of JQL `sprint = X`,
-        // which only returns currently-tagged issues and silently drops any
-        // that were re-parented or cancelled out.
-        const rawIssues       = await fetchIssuesByKeys(snap.allKeys);
-        const issues          = applySnapshotToIssues(rawIssues, snap);
+        // Active sprint = match what the user sees on Jira's "Active sprints"
+        // board view. Use live JQL `sprint = X` (current membership) which
+        // includes mid-sprint additions and current statuses. No Greenhopper
+        // snapshot here — that only matters once the sprint closes.
+        const issues          = await fetchIssuesBySprintName(board, sprint.name);
+        const metrics         = calcMetrics(issues);
         const epicBreakdown   = buildEpicBreakdown(issues);
         const effortBreakdown = buildEffortBreakdown(issues);
         const ticketsPerDev   = buildTicketsPerDev(issues);
