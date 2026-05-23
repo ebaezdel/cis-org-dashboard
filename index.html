@@ -2230,6 +2230,18 @@ function renderBoardHealthGrid(containerId) {
   });
   var data = Object.values(byBoard);
 
+  // Canonical board order — mirrors scripts/sync.js BOARDS array so the cards
+  // always render Saloni → Maria → Marissa → Yan in the same sequence as the
+  // sprint table and the rest of the dashboard.
+  var BOARD_ORDER = ['FC','CSS','CEGEO','QAS','TSC','MSV','RPS','FIND','TCET','CON','LHAPI','TLCC','QUA'];
+  data.sort(function(a, b){
+    var ai = BOARD_ORDER.indexOf(a.board);
+    var bi = BOARD_ORDER.indexOf(b.board);
+    if (ai === -1) ai = 999;
+    if (bi === -1) bi = 999;
+    return ai - bi;
+  });
+
   // When filtering by active, show stub cards for boards with no active sprint
   if (statusF === 'active') {
     var allBoards = ALL_DATA.reduce(function(acc, d) {
@@ -2245,6 +2257,14 @@ function renderBoardHealthGrid(containerId) {
       if (emF && sample.em !== emF) return;
       if (boardF && board !== boardF) return;
       data.push({ board: board, em: sample.em, _noActiveSprint: true, issues: 0, totalSP: 0, doneSP: 0, pendingSP: 0, spRes: 0 });
+    });
+    // Re-sort after stub cards were appended so they slot into the canonical position.
+    data.sort(function(a, b){
+      var ai = BOARD_ORDER.indexOf(a.board);
+      var bi = BOARD_ORDER.indexOf(b.board);
+      if (ai === -1) ai = 999;
+      if (bi === -1) bi = 999;
+      return ai - bi;
     });
   }
 
