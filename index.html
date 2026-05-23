@@ -2369,7 +2369,7 @@ function renderBoardHealthGrid(containerId) {
       '<div class="bc-bar"><div class="bc-bar-fill" style="width:' + (isNone ? 0 : Math.min(pct,100)) + '%;background:' + barColor + '"></div></div>' +
       '<div class="bc-meta">' +
         '<span>' + (isNone ? '— SP' : 'Committed ' + d.committedSP + ' SP · Completed ' + d.doneSP + ' SP') + '</span>' +
-        '<span>' + (isNone ? '—' : d.issues + ' issues') + '</span>' +
+        '<span' + (isNone ? '' : ' title="Includes all issue types — stories, tasks, sub-tasks, bugs, spikes, incidents, design and dependency tickets — that touched this sprint."') + '>' + (isNone ? '—' : d.issues + ' issues') + '</span>' +
       '</div>' +
       (isNone ? '' : buildBreakdownHTML(d)) +
       '<div class="bc-info">' +
