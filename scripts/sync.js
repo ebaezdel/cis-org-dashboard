@@ -469,11 +469,16 @@ function patchHTMLBySprintName(html, sprintName, sprintStatus, m, epicBreakdown,
 
   const result = lines.map(line => {
     if (!line.includes(`sprintName:'${sprintName}'`)) return line;
+    // Mark found as soon as we see the row by name. Don't gate on whether
+    // replace() produced a diff — when the live data already matches what's on
+    // disk (closed sprints whose snapshot hasn't shifted) all replacers return
+    // the same string, which previously caused the "no row found" branch to
+    // append a duplicate every sync.
+    found = true;
     let updated = line.replace(METRICS_RE, metricsRepl);
     updated = updated.replace(PAYLOAD_RE, payloadRepl);
     updated = updated.replace(SPRINTSTATUS_RE, sprintStatusRepl);
     if (sprintGoal != null) updated = updated.replace(SPRINTGOAL_RE, `sprintGoal:${jsStr(sprintGoal)}`);
-    if (updated !== line) found = true;
     return updated;
   });
 
@@ -524,8 +529,20 @@ function buildNewSprintRow(opts) {
 }
 
 // Locate the closing `];` of `var ALL_SPRINTS_FY26 = [` and insert the new row
-// just before it. Returns {changed, lines}.
+// just before it. Returns {changed, lines}. Refuses to insert if a row with
+// the same sprintName already exists — defensive guard against duplication.
 function insertRowIntoArray(lines, newRow) {
+  const nameMatch = newRow.match(/sprintName:'([^']+)'/);
+  const sprintName = nameMatch ? nameMatch[1] : null;
+  if (sprintName) {
+    const needle = `sprintName:'${sprintName}'`;
+    for (let i = 0; i < lines.length; i++) {
+      if (lines[i].includes(needle)) {
+        process.stderr.write(`[WARN] Skipped duplicate insert for sprintName:'${sprintName}' — already present\n`);
+        return { changed: false, lines };
+      }
+    }
+  }
   let inArray = false;
   for (let i = 0; i < lines.length; i++) {
     if (!inArray && /var\s+ALL_SPRINTS_FY26\s*=\s*\[/.test(lines[i])) {
@@ -539,6 +556,38 @@ function insertRowIntoArray(lines, newRow) {
     }
   }
   return { changed: false, lines };
+}
+
+// Walk the ALL_SPRINTS_FY26 array, drop any row whose sprintName has already
+// been seen. Cleans up duplicates introduced by the prior bug. Idempotent.
+function dedupeSprintRows(html) {
+  const lines = html.split('\n');
+  const seen = new Set();
+  let inArray = false;
+  let dropped = 0;
+  const out = [];
+  for (const line of lines) {
+    if (!inArray && /var\s+ALL_SPRINTS_FY26\s*=\s*\[/.test(line)) {
+      inArray = true;
+      out.push(line);
+      continue;
+    }
+    if (inArray && /^\];?\s*$/.test(line)) {
+      inArray = false;
+      out.push(line);
+      continue;
+    }
+    if (inArray) {
+      const m = line.match(/sprintName:'([^']+)'/);
+      if (m) {
+        if (seen.has(m[1])) { dropped++; continue; }
+        seen.add(m[1]);
+      }
+    }
+    out.push(line);
+  }
+  if (dropped) console.log(`[INFO] dedupeSprintRows dropped ${dropped} duplicate row(s)`);
+  return out.join('\n');
 }
 
 function patchHTML(html, board, sprintStatus, m, epicBreakdown, effortBreakdown, ticketsPerDev) {
@@ -573,6 +622,7 @@ async function main() {
   console.log(`=== CIS Org Dashboard — Jira Sync  ${new Date().toISOString()} ===`);
 
   let html = fs.readFileSync(HTML_PATH, 'utf8');
+  html = dedupeSprintRows(html);
 
   for (const { board, boardId, em } of BOARDS) {
     const hasBoard = boardId != null;
