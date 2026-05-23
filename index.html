@@ -2289,35 +2289,13 @@ function renderBoardHealthGrid(containerId) {
   function buildBreakdownHTML(d) {
     var rows = (d._multiSprint && Array.isArray(d._sourceRows)) ? d._sourceRows : [d];
     var agg = aggregateTickets(rows);
-    var totalStatus = 0;
-    Object.keys(agg.statusCounts).forEach(function(k){ totalStatus += agg.statusCounts[k]; });
-    if (!totalStatus) return '';
     var totalType = 0;
     Object.keys(agg.typeCounts).forEach(function(k){ totalType += agg.typeCounts[k]; });
-    // Integrity check — type sum, status sum, and visible issue count must agree.
-    if (totalStatus !== totalType || (typeof d.issues === 'number' && totalStatus !== d.issues && !d._multiSprint)) {
+    if (!totalType) return '';
+    if (typeof d.issues === 'number' && totalType !== d.issues && !d._multiSprint) {
       console.debug('[breakdown] mismatch on ' + d.board + ' ' + (d.sprintName || '?') +
-        ' — issues:' + d.issues + ' typeSum:' + totalType + ' statusSum:' + totalStatus);
+        ' — issues:' + d.issues + ' typeSum:' + totalType);
     }
-    var known = {};
-    STATUS_BREAKDOWN.forEach(function(s){ known[s.name] = true; });
-    var unknownTotal = 0;
-    Object.keys(agg.statusCounts).forEach(function(k){ if (!known[k]) unknownTotal += agg.statusCounts[k]; });
-    var segs = STATUS_BREAKDOWN
-      .filter(function(s){ return agg.statusCounts[s.name]; })
-      .map(function(s){
-        var pct = (agg.statusCounts[s.name] / totalStatus * 100).toFixed(2);
-        return '<span class="' + s.cls + '" style="width:' + pct + '%" title="' + s.name + ': ' + agg.statusCounts[s.name] + '"></span>';
-      }).join('');
-    if (unknownTotal) {
-      var pctU = (unknownTotal / totalStatus * 100).toFixed(2);
-      segs += '<span class="sb-unk" style="width:' + pctU + '%" title="Other: ' + unknownTotal + '"></span>';
-    }
-    var statusItems = STATUS_BREAKDOWN
-      .filter(function(s){ return agg.statusCounts[s.name]; })
-      .map(function(s){ return '<span>' + agg.statusCounts[s.name] + ' ' + s.abbr + '</span>'; });
-    if (unknownTotal) statusItems.push('<span>' + unknownTotal + ' ?</span>');
-    var statusRow = statusItems.join('<span class="sep">·</span>');
     var typeItems = Object.keys(agg.typeCounts)
       .map(function(k){ return [k, agg.typeCounts[k]]; })
       .sort(function(a,b){ return b[1]-a[1]; })
@@ -2327,14 +2305,6 @@ function renderBoardHealthGrid(containerId) {
              '<div class="bc-breakdown-row">' +
                '<span class="bc-breakdown-label">Types</span>' +
                '<div class="bc-type-counts">' + typeRow + '</div>' +
-             '</div>' +
-             '<div class="bc-breakdown-row">' +
-               '<span class="bc-breakdown-label">Status</span>' +
-               '<div class="bc-status-bar">' + segs + '</div>' +
-             '</div>' +
-             '<div class="bc-breakdown-row">' +
-               '<span class="bc-breakdown-label"></span>' +
-               '<div class="bc-status-counts">' + statusRow + '</div>' +
              '</div>' +
            '</div>';
   }

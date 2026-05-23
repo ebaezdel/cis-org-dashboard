@@ -193,10 +193,11 @@ async function fetchSprintGoal(sprintId) {
 async function fetchSprintSnapshot(boardId, sprintId) {
   const r = await greenphopper(`/rapid/charts/sprintreport?rapidViewId=${boardId}&sprintId=${sprintId}`);
   const c = r.contents || {};
-  const completed    = (c.completedIssues || []).map(i => i.key);
-  const notCompleted = (c.issuesNotCompletedInCurrentSprint || []).map(i => i.key);
-  const punted       = (c.puntedIssues || []).map(i => i.key);
-  const added        = c.issueKeysAddedDuringSprint && typeof c.issueKeysAddedDuringSprint === 'object'
+  const completed        = (c.completedIssues || []).map(i => i.key);
+  const notCompleted     = (c.issuesNotCompletedInCurrentSprint || []).map(i => i.key);
+  const punted           = (c.puntedIssues || []).map(i => i.key);
+  const completedOutside = (c.issuesCompletedInAnotherSprint || []).map(i => i.key);
+  const added            = c.issueKeysAddedDuringSprint && typeof c.issueKeysAddedDuringSprint === 'object'
     ? new Set(Object.keys(c.issueKeysAddedDuringSprint))
     : new Set();
 
@@ -204,7 +205,7 @@ async function fetchSprintSnapshot(boardId, sprintId) {
   const initialSP = {};
   // Per-issue snapshot status name and category at the time of close.
   const snapStatus = {};
-  for (const arr of [c.completedIssues, c.issuesNotCompletedInCurrentSprint, c.puntedIssues]) {
+  for (const arr of [c.completedIssues, c.issuesNotCompletedInCurrentSprint, c.puntedIssues, c.issuesCompletedInAnotherSprint]) {
     (arr || []).forEach(i => {
       const v = i.estimateStatistic?.statFieldValue?.value;
       if (typeof v === 'number') initialSP[i.key] = v;
@@ -215,16 +216,17 @@ async function fetchSprintSnapshot(boardId, sprintId) {
 
   // Issues that count toward the snapshot of this sprint (everything except
   // mid-sprint additions — those are excluded from velocity chart).
-  const allKeys = [...completed, ...notCompleted, ...punted].filter(k => !added.has(k));
+  const allKeys = [...completed, ...notCompleted, ...punted, ...completedOutside].filter(k => !added.has(k));
 
-  return { contents: c, completed, notCompleted, punted, added, initialSP, snapStatus, allKeys };
+  return { contents: c, completed, notCompleted, punted, completedOutside, added, initialSP, snapStatus, allKeys };
 }
 
 // Apply the Greenhopper snapshot onto a Jira-issue list so closed-sprint
 // breakdowns/statuses reflect sprint-close state, not today's live state.
 function applySnapshotToIssues(issues, snap) {
-  const completedSet = new Set(snap.completed);
-  const puntedSet    = new Set(snap.punted);
+  const completedSet        = new Set(snap.completed);
+  const puntedSet           = new Set(snap.punted);
+  const completedOutsideSet = new Set(snap.completedOutside || []);
   return issues
     // drop anything that was added mid-sprint — velocity chart ignores them
     .filter(i => !snap.added.has(i.key))
@@ -232,9 +234,10 @@ function applySnapshotToIssues(issues, snap) {
       const f = { ...i.fields };
       const ss = snap.snapStatus[i.key];
       if (ss) {
-        const cat = completedSet.has(i.key) ? 'done'
-                  : puntedSet.has(i.key)    ? 'new'
-                  :                            (ss.category || 'indeterminate');
+        const cat = completedSet.has(i.key)        ? 'done'
+                  : completedOutsideSet.has(i.key) ? 'done'
+                  : puntedSet.has(i.key)           ? 'new'
+                  :                                   (ss.category || 'indeterminate');
         f.status = { ...(f.status || {}), name: ss.name, statusCategory: { key: cat } };
       }
       // override SP with snapshot initial estimate so per-ticket SP matches velocity
@@ -252,9 +255,14 @@ async function fetchSprintReport(boardId, sprintId) {
   const r = await greenphopper(`/rapid/charts/sprintreport?rapidViewId=${boardId}&sprintId=${sprintId}`);
   const c = r.contents || {};
 
-  const completedIssues = c.completedIssues                    || [];
-  const notCompleted    = c.issuesNotCompletedInCurrentSprint   || [];
-  const punted          = c.puntedIssues                        || [];
+  const completedIssues = c.completedIssues                       || [];
+  const notCompleted    = c.issuesNotCompletedInCurrentSprint      || [];
+  const punted          = c.puntedIssues                           || [];
+  // Issues that were carried into this sprint at start but completed outside
+  // (commonly: cancelled at sprint start, finished in another sprint, or
+  // re-parented). Jira's Sprint Report shows them under "Issues completed
+  // outside of this sprint" and counts their initial SP toward Commitment.
+  const completedOutside = c.issuesCompletedInAnotherSprint        || [];
 
   // Jira's "Commitment" excludes issues added after the sprint started.
   // Walk every issue that touched the sprint and sum estimateStatistic (which
@@ -272,15 +280,25 @@ async function fetchSprintReport(boardId, sprintId) {
   }, 0);
 
   // committedSP = SP on the board at sprint start (velocity "Commitment")
-  // doneSP      = SP of completed issues using current estimates (velocity "Completed")
-  const committedSP = r1(sumInitial(completedIssues) + sumInitial(notCompleted) + sumInitial(punted));
-  const doneSP      = r1(c.completedIssuesEstimateSum?.value          ?? 0);
+  //   = completed-here + not-completed + punted + completed-outside (all minus mid-sprint adds)
+  // doneSP      = completed-here SP + completed-outside SP (these count as done)
+  const committedSP = r1(
+    sumInitial(completedIssues) +
+    sumInitial(notCompleted)    +
+    sumInitial(punted)          +
+    sumInitial(completedOutside)
+  );
+  const doneSP      = r1(
+    (c.completedIssuesEstimateSum?.value ?? 0) +
+    (c.issuesCompletedInAnotherSprintEstimateSum?.value ?? 0)
+  );
   const pendingSP   = r1(c.issuesNotCompletedEstimateSum?.value        ?? 0);
   const totalSP     = r1(doneSP + pendingSP);
   // Issue count excludes mid-sprint adds (matches velocity chart denominator).
   const issues      = completedIssues.filter(i => !added.has(i.key)).length
                     + notCompleted.filter(i => !added.has(i.key)).length
-                    + punted.filter(i => !added.has(i.key)).length;
+                    + punted.filter(i => !added.has(i.key)).length
+                    + completedOutside.filter(i => !added.has(i.key)).length;
   const spRes       = pct(doneSP, committedSP);
 
   return {
@@ -691,8 +709,14 @@ async function main() {
         console.log('(no active sprint)');
       } else {
         const sprint          = activeSprints[0];
+        const snap            = await fetchSprintSnapshot(boardId, sprint.id);
         const metrics         = await fetchSprintReport(boardId, sprint.id);
-        const issues          = await fetchIssuesBySprintName(board, sprint.name);
+        // Use snap.allKeys (which now includes issuesCompletedInAnotherSprint
+        // — i.e. cancelled-at-start tickets) instead of JQL `sprint = X`,
+        // which only returns currently-tagged issues and silently drops any
+        // that were re-parented or cancelled out.
+        const rawIssues       = await fetchIssuesByKeys(snap.allKeys);
+        const issues          = applySnapshotToIssues(rawIssues, snap);
         const epicBreakdown   = buildEpicBreakdown(issues);
         const effortBreakdown = buildEffortBreakdown(issues);
         const ticketsPerDev   = buildTicketsPerDev(issues);
