@@ -260,6 +260,9 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-s
 .bc-goal-toggle .bc-goal-arrow{display:inline-block;transition:transform .2s;font-style:normal;}
 .bc-goal-body{font-size:10px;color:var(--muted);font-style:italic;line-height:1.5;margin-top:4px;display:none;}
 .bc-goal-body.open{display:block;}
+.bc-issues-tip{position:relative;cursor:help;border-bottom:1px dotted var(--muted2);}
+.bc-issues-tip:hover::after{content:attr(data-tip);position:absolute;bottom:calc(100% + 6px);right:0;background:var(--text);color:var(--surface);font-size:10px;font-weight:400;line-height:1.4;letter-spacing:0;padding:6px 8px;border-radius:4px;white-space:normal;width:240px;z-index:10;box-shadow:0 2px 8px rgba(0,0,0,.15);pointer-events:none;}
+.bc-issues-tip:hover::before{content:'';position:absolute;bottom:calc(100% + 1px);right:8px;border:5px solid transparent;border-top-color:var(--text);z-index:10;pointer-events:none;}
 .bc-breakdown{margin-top:6px;display:flex;flex-direction:column;gap:4px;}
 .bc-breakdown-row{display:flex;align-items:center;gap:6px;font-size:10px;}
 .bc-breakdown-label{color:var(--muted2);text-transform:uppercase;letter-spacing:.4px;font-size:8px;font-weight:700;flex-shrink:0;width:42px;}
@@ -2369,7 +2372,9 @@ function renderBoardHealthGrid(containerId) {
       '<div class="bc-bar"><div class="bc-bar-fill" style="width:' + (isNone ? 0 : Math.min(pct,100)) + '%;background:' + barColor + '"></div></div>' +
       '<div class="bc-meta">' +
         '<span>' + (isNone ? '— SP' : 'Committed ' + d.committedSP + ' SP · Completed ' + d.doneSP + ' SP') + '</span>' +
-        '<span' + (isNone ? '' : ' title="Includes all issue types — stories, tasks, sub-tasks, bugs, spikes, incidents, design and dependency tickets — that touched this sprint."') + '>' + (isNone ? '—' : d.issues + ' issues') + '</span>' +
+        (isNone
+          ? '<span>—</span>'
+          : '<span class="bc-issues-tip" data-tip="Includes all issue types — stories, tasks, sub-tasks, bugs, spikes, incidents, design and dependency — that touched this sprint.">' + d.issues + ' issues</span>') +
       '</div>' +
       (isNone ? '' : buildBreakdownHTML(d)) +
       '<div class="bc-info">' +
