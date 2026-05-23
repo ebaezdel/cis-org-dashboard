@@ -562,16 +562,35 @@ function buildNewSprintRow(opts) {
 }
 
 // Locate the closing `];` of `var ALL_SPRINTS_FY26 = [` and insert the new row
-// just before it. Returns {changed, lines}. Refuses to insert if a row with
-// the same sprintName already exists — defensive guard against duplication.
+// just before it. Returns {changed, lines}. Refuses to insert if either:
+//   - the same sprintName already exists, OR
+//   - a row with the same (board, fy, sprintNum) already exists — Jira
+//     occasionally emits two distinct names that map to the same logical
+//     sprint (e.g. CSS.FY27.Q3.S19 and CSS.FY27.Q4.S19 — only the canonical
+//     quarter survives).
 function insertRowIntoArray(lines, newRow) {
-  const nameMatch = newRow.match(/sprintName:'([^']+)'/);
-  const sprintName = nameMatch ? nameMatch[1] : null;
+  const nameMatch   = newRow.match(/sprintName:'([^']+)'/);
+  const boardMatch  = newRow.match(/board:'([^']+)'/);
+  const fyMatch     = newRow.match(/fy:'(FY\d{2})'/);
+  const sprintMatch = newRow.match(/sprint:(\d+)/);
+  const sprintName  = nameMatch ? nameMatch[1] : null;
   if (sprintName) {
     const needle = `sprintName:'${sprintName}'`;
     for (let i = 0; i < lines.length; i++) {
       if (lines[i].includes(needle)) {
         process.stderr.write(`[WARN] Skipped duplicate insert for sprintName:'${sprintName}' — already present\n`);
+        return { changed: false, lines };
+      }
+    }
+  }
+  if (boardMatch && fyMatch && sprintMatch) {
+    const board = boardMatch[1];
+    const fy    = fyMatch[1];
+    const sNum  = sprintMatch[1];
+    for (let i = 0; i < lines.length; i++) {
+      const L = lines[i];
+      if (L.includes(`board:'${board}'`) && L.includes(`fy:'${fy}'`) && new RegExp(`sprint:${sNum}\\b`).test(L)) {
+        process.stderr.write(`[WARN] Skipped insert for sprintName:'${sprintName}' — (${board}, ${fy}, sprint:${sNum}) already present\n`);
         return { changed: false, lines };
       }
     }
