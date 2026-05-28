@@ -283,6 +283,55 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-s
 .sb-cxl{background:#475569;}
 .sb-unk{background:#64748b;}
 
+/* Status chips — Jira-style Todo / In Progress / Done counts */
+.bc-status-chips{display:flex;gap:6px;margin:8px 0 4px;}
+.bc-chip{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:6px 4px;border-radius:6px;min-width:0;}
+.bc-chip-num{font-size:16px;font-weight:700;line-height:1;}
+.bc-chip-label{font-size:8px;font-weight:600;letter-spacing:.4px;text-transform:uppercase;margin-top:3px;}
+.bc-chip-todo{background:#f1f5f9;color:#475569;}
+.bc-chip-todo .bc-chip-label{color:#64748b;}
+.bc-chip-inprog{background:#dbeafe;color:#1d4ed8;}
+.bc-chip-inprog .bc-chip-label{color:#2563eb;}
+.bc-chip-done{background:#dcfce7;color:#15803d;}
+.bc-chip-done .bc-chip-label{color:#16a34a;}
+
+/* SP summary line — single row under the chips */
+.bc-sp-summary{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:11px;color:var(--muted);margin-top:4px;}
+.bc-sp-summary strong{color:var(--text);font-weight:700;font-size:12px;}
+.bc-sp-summary .bc-sep{color:var(--muted2);opacity:.5;}
+
+/* Type breakdown line — slightly muted, beneath SP summary */
+.bc-types-line{font-size:10px;color:var(--muted);margin-top:3px;display:flex;flex-wrap:wrap;gap:5px;}
+.bc-types-line .sep{color:var(--muted2);opacity:.5;}
+
+/* Footer: avatars + actions */
+.bc-footer{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px;padding-top:8px;border-top:1px solid var(--border);}
+.bc-avatars{display:flex;align-items:center;gap:0;flex:1;min-width:0;}
+.bc-avatar{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;font-size:9px;font-weight:700;color:#fff;letter-spacing:.2px;border:1.5px solid var(--surface);margin-left:-5px;cursor:default;flex-shrink:0;}
+.bc-avatar:first-child{margin-left:0;}
+.bc-avatar-more{display:inline-flex;align-items:center;justify-content:center;height:22px;padding:0 7px;border-radius:11px;background:var(--surface2);color:var(--muted);font-size:9px;font-weight:700;margin-left:4px;}
+.bc-footer-actions{display:flex;align-items:center;gap:8px;flex-shrink:0;}
+.bc-menu-btn{background:none;border:1px solid var(--border);color:var(--muted);font-size:14px;font-weight:700;line-height:1;cursor:pointer;border-radius:4px;padding:2px 7px;letter-spacing:1px;transition:all .15s;font-family:inherit;}
+.bc-menu-btn:hover{background:var(--surface2);color:var(--text);border-color:var(--muted2);}
+
+/* Workload-by-assignee modal */
+.modal-overlay{display:none;position:fixed;inset:0;z-index:200;background:rgba(15,23,42,.5);align-items:center;justify-content:center;padding:20px;}
+.modal-overlay.open{display:flex;}
+.modal-card{background:var(--surface);border-radius:10px;box-shadow:0 10px 32px rgba(0,0,0,.2);width:100%;max-width:560px;max-height:80vh;overflow:auto;padding:20px 24px;}
+.modal-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;}
+.modal-header h3{font-size:16px;font-weight:600;color:var(--text);margin:0;}
+.modal-close{background:none;border:none;font-size:20px;line-height:1;cursor:pointer;color:var(--muted);padding:4px 8px;border-radius:4px;font-family:inherit;}
+.modal-close:hover{background:var(--surface2);color:var(--text);}
+.modal-subtitle{font-size:12px;color:var(--muted);margin-bottom:16px;font-family:monospace;}
+.workload-table{width:100%;border-collapse:collapse;font-size:12px;}
+.workload-table th{text-align:left;font-weight:600;color:var(--muted);padding:8px 10px;border-bottom:1px solid var(--border);font-size:11px;text-transform:uppercase;letter-spacing:.3px;}
+.workload-table th.num,.workload-table td.num{text-align:right;}
+.workload-table td{padding:9px 10px;border-bottom:1px solid var(--border);color:var(--text);}
+.workload-table tr:last-child td{border-bottom:none;}
+.workload-table tr.workload-total td{font-weight:700;background:var(--surface2);border-top:2px solid var(--border);border-bottom:none;}
+.workload-table .workload-name-cell{display:flex;align-items:center;gap:8px;}
+.workload-table .workload-sp{display:inline-block;padding:2px 8px;border-radius:10px;background:var(--surface2);font-weight:600;min-width:24px;text-align:center;}
+
 /* Charts row */
 .charts-row{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px;}
 @media(max-width:800px){.charts-row{grid-template-columns:1fr;}}
@@ -2386,30 +2435,86 @@ function renderBoardHealthGrid(containerId) {
     var statusLabel = STATUS_LABELS_CARD[d.sprintStatus] || d.sprintStatus;
     var base = boardBaseUrl(d.board);
     var velocityUrl = base + '/reports/velocity';
+    var sourceRows  = (d._multiSprint && Array.isArray(d._sourceRows)) ? d._sourceRows : [d];
+
+    // Status chips (Jira-style Todo / In Progress / Done — work-item counts)
+    var chips = bucketStatusFromRows(sourceRows);
+    var chipsHTML = isNone ? '' :
+      '<div class="bc-status-chips">' +
+        '<div class="bc-chip bc-chip-todo"><div class="bc-chip-num">'   + chips.todo   + '</div><div class="bc-chip-label">To Do</div></div>' +
+        '<div class="bc-chip bc-chip-inprog"><div class="bc-chip-num">' + chips.inprog + '</div><div class="bc-chip-label">In Prog</div></div>' +
+        '<div class="bc-chip bc-chip-done"><div class="bc-chip-num">'   + chips.done   + '</div><div class="bc-chip-label">Done</div></div>' +
+      '</div>';
+
+    // SP summary line
+    var spHTML = isNone
+      ? '<div class="bc-sp-summary"><span>— SP</span><span class="bc-sep">·</span><span>—</span></div>'
+      : '<div class="bc-sp-summary">' +
+          '<span><strong>' + d.committedSP + '</strong> SP committed</span>' +
+          '<span class="bc-sep">·</span>' +
+          '<span><strong>' + d.doneSP + '</strong> SP done</span>' +
+          '<span class="bc-sep">·</span>' +
+          '<span class="bc-issues-tip" data-tip="Matches Jira’s work-item count (sub-tasks excluded)">' + d.issues + ' items</span>' +
+        '</div>';
+
+    // Type breakdown — small line beneath SP summary (kept; useful at-a-glance)
+    var typesHTML = isNone ? '' : (function(){
+      var typeCounts = {};
+      sourceRows.forEach(function(r){
+        (r.epicBreakdown || []).forEach(function(e){
+          (e.tickets || []).forEach(function(t){
+            var ty = t.issueType || 'Other';
+            typeCounts[ty] = (typeCounts[ty] || 0) + 1;
+          });
+        });
+      });
+      var entries = Object.keys(typeCounts).map(function(k){ return [k, typeCounts[k]]; })
+        .sort(function(a,b){ return b[1]-a[1]; });
+      if (!entries.length) return '';
+      var inner = entries.map(function(p){ return '<span>' + p[1] + ' ' + p[0] + '</span>'; })
+        .join('<span class="sep">·</span>');
+      return '<div class="bc-types-line">' + inner + '</div>';
+    })();
+
+    // Footer: avatars + ⋯ menu + Velocity link
+    var workload = isNone ? [] : aggregateWorkload(sourceRows);
+    var avatars  = workload.slice(0, 5);
+    var moreCount = workload.length - avatars.length;
+    var avatarsHTML = avatars.map(function(e){ return initialsAvatar(e.dev); }).join('') +
+      (moreCount > 0 ? '<span class="bc-avatar-more" title="' + moreCount + ' more">+' + moreCount + '</span>' : '');
+    // Use data-* attributes so sprint names with special characters can't
+    // break the onclick handler. A single delegated listener (installed once
+    // outside this function) reads them and opens the modal.
+    var dataAttrs = 'data-board="' + escapeHtml(d.board) + '"' +
+      ' data-sprint-name="' + escapeHtml(d._multiSprint ? '' : (d.sprintName || '')) + '"';
+    var footerHTML = '<div class="bc-footer">' +
+      '<div class="bc-avatars">' + (avatarsHTML || '<span style="color:var(--muted2);font-size:10px;">No assignees</span>') + '</div>' +
+      '<div class="bc-footer-actions">' +
+        '<a class="bc-report-link" href="' + velocityUrl + '" target="_blank">↗ Velocity</a>' +
+        (isNone ? '' : '<button class="bc-menu-btn js-workload-trigger" ' + dataAttrs + ' aria-label="Workload by assignee" title="Workload by assignee">⋯</button>') +
+      '</div>' +
+    '</div>';
+
+    var hasGoal = !isNone && d.sprintGoal && d.sprintGoal !== '—' && !d._multiSprint;
+
     return '<div class="board-card health-' + hc + '">' +
       '<div class="bc-header">' +
         '<div><div class="bc-name">' + d.board + '</div><div class="bc-em">' + d.em + '</div></div>' +
         '<div class="bc-pct ' + pctClass + '">' + (isNone ? '—' : pct + '%') + '</div>' +
       '</div>' +
       '<div class="bc-bar"><div class="bc-bar-fill" style="width:' + (isNone ? 0 : Math.min(pct,100)) + '%;background:' + barColor + '"></div></div>' +
-      '<div class="bc-meta">' +
-        '<span>' + (isNone ? '— SP' : 'Committed ' + d.committedSP + ' SP · Completed ' + d.doneSP + ' SP') + '</span>' +
-        (isNone
-          ? '<span>—</span>'
-          : '<span class="bc-issues-tip" data-tip="Matches Jira’s work-item count (sub-tasks excluded)">' + d.issues + ' issues</span>') +
-      '</div>' +
-      (isNone ? '' : buildBreakdownHTML(d)) +
+      chipsHTML +
+      spHTML +
+      typesHTML +
       (isNone ? '' : buildDriftHTML(d)) +
       '<div class="bc-info">' +
+        (hasGoal ? '<span class="bc-goal-toggle" onclick="toggleGoal(this)"><span class="bc-goal-arrow">▶</span> Goal</span><span class="bc-sep">·</span>' : '') +
         '<span class="bc-sprint">' + sprintLabel + '</span>' +
         ((!isNone && d.startDate && !d._multiSprint) ? '<span class="bc-sep">·</span><span class="bc-dates">' + d.startDate + ' → ' + (d.endDate || '?') + '</span>' : '') +
         (showStatus ? '<span class="bc-sep">·</span><span class="bc-status ' + d.sprintStatus + '"><span class="bc-status-dot"></span>' + statusLabel + '</span>' : '') +
       '</div>' +
-      (!d._multiSprint ? '<div class="bc-actions">' +
-        ((!isNone && d.sprintGoal && d.sprintGoal !== '—') ? '<span class="bc-goal-toggle" onclick="toggleGoal(this)"><span class="bc-goal-arrow">▶</span> Sprint Goal</span>' : '') +
-        '<a class="bc-report-link" href="' + velocityUrl + '" target="_blank">↗ Velocity</a>' +
-      '</div>' : '') +
-      ((!isNone && d.sprintGoal && d.sprintGoal !== '—' && !d._multiSprint) ? '<div class="bc-goal-body">' + d.sprintGoal + '</div>' : '') +
+      (hasGoal ? '<div class="bc-goal-body">' + d.sprintGoal + '</div>' : '') +
+      footerHTML +
     '</div>';
   }).join('');
 }
@@ -3031,12 +3136,167 @@ function renderSHDTable() {
 }
 
 function toggleGoal(el) {
-  var actions = el.closest('.bc-actions');
-  var body = actions ? actions.nextElementSibling : el.nextElementSibling;
-  if (!body || !body.classList.contains('bc-goal-body')) return;
+  // The toggle can live inside .bc-actions (legacy stub cards) or directly
+  // inside .bc-info (new card layout). Walk up to the enclosing board-card
+  // and find the goal body within it.
+  var card = el.closest('.board-card');
+  var body = card ? card.querySelector('.bc-goal-body') : null;
+  if (!body) return;
   var arrow = el.querySelector('.bc-goal-arrow');
   var open = body.classList.toggle('open');
   if (arrow) arrow.style.transform = open ? 'rotate(90deg)' : '';
+}
+
+// ─── Workload-by-assignee modal (Jira-style) ────────────────────────────────
+
+// Map a person's name to a stable color so the same avatar shows the same
+// color everywhere on the dashboard. Hash → palette index.
+var AVATAR_PALETTE = ['#3b82f6','#8b5cf6','#ec4899','#f59e0b','#10b981','#06b6d4','#ef4444','#6366f1','#84cc16','#f97316','#14b8a6','#a855f7'];
+function avatarColorFor(name) {
+  if (!name || name === 'Unassigned') return '#94a3b8';
+  var h = 0;
+  for (var i = 0; i < name.length; i++) { h = (h * 31 + name.charCodeAt(i)) | 0; }
+  return AVATAR_PALETTE[Math.abs(h) % AVATAR_PALETTE.length];
+}
+function avatarInitials(name) {
+  if (!name || name === 'Unassigned') return '?';
+  var parts = String(name).trim().split(/\s+/);
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+function escapeHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+function initialsAvatar(name) {
+  var safeName = escapeHtml(name || 'Unassigned');
+  return '<span class="bc-avatar" style="background:' + avatarColorFor(name) + '" title="' + safeName + '">' +
+    escapeHtml(avatarInitials(name)) + '</span>';
+}
+
+// Aggregate ticketsPerDev across one or more rows. Returns sorted array of
+// { dev, tickets, sp } with the highest SP first, "Unassigned" pinned last.
+function aggregateWorkload(rows) {
+  var byDev = {};
+  rows.forEach(function(r){
+    (r.ticketsPerDev || []).forEach(function(e){
+      if (!byDev[e.dev]) byDev[e.dev] = { dev: e.dev, tickets: 0, sp: 0 };
+      byDev[e.dev].tickets += (e.tickets || 0);
+      byDev[e.dev].sp      += (e.sp || 0);
+    });
+  });
+  var arr = Object.values(byDev).map(function(e){ return { dev: e.dev, tickets: e.tickets, sp: Math.round(e.sp * 10) / 10 }; });
+  arr.sort(function(a,b){
+    if (a.dev === 'Unassigned') return 1;
+    if (b.dev === 'Unassigned') return -1;
+    return b.sp - a.sp;
+  });
+  return arr;
+}
+
+// Find a row by board+sprintName. Falls back to aggregating all rows for
+// the given board when sprintName is the multi-sprint sentinel.
+function findRowsForWorkload(board, sprintName) {
+  if (!Array.isArray(window.ALL_SPRINTS_FY26)) return [];
+  if (!sprintName || /^\d+ sprints$/.test(sprintName)) {
+    // Multi-sprint card: pull the source rows from the FILTERED set so the
+    // modal aggregates the same data the card aggregated.
+    var filtered = window.FILTERED || [];
+    return filtered.filter(function(d){ return d.board === board; });
+  }
+  var match = window.ALL_SPRINTS_FY26.filter(function(d){ return d.board === board && d.sprintName === sprintName; });
+  return match;
+}
+
+function renderWorkloadTable(rows) {
+  var workload = aggregateWorkload(rows);
+  if (!workload.length) {
+    return '<div style="color:var(--muted);padding:20px;text-align:center;">No assignee data for this sprint.</div>';
+  }
+  var totalItems = 0, totalSP = 0;
+  var bodyRows = workload.map(function(e){
+    totalItems += e.tickets;
+    totalSP    += e.sp;
+    return '<tr>' +
+      '<td><div class="workload-name-cell">' + initialsAvatar(e.dev) + '<span>' + escapeHtml(e.dev) + '</span></div></td>' +
+      '<td class="num">' + e.tickets + '</td>' +
+      '<td class="num" style="color:var(--muted2)">0</td>' +
+      '<td class="num"><span class="workload-sp">' + e.sp + '</span></td>' +
+    '</tr>';
+  }).join('');
+  return '<table class="workload-table">' +
+    '<thead><tr>' +
+      '<th>Assignee</th>' +
+      '<th class="num">Work items</th>' +
+      '<th class="num">Subtasks</th>' +
+      '<th class="num">Story points</th>' +
+    '</tr></thead>' +
+    '<tbody>' + bodyRows +
+      '<tr class="workload-total">' +
+        '<td>Total</td>' +
+        '<td class="num">' + totalItems + '</td>' +
+        '<td class="num">0</td>' +
+        '<td class="num">' + (Math.round(totalSP * 10) / 10) + '</td>' +
+      '</tr>' +
+    '</tbody></table>';
+}
+
+function openWorkloadModal(board, sprintName) {
+  var rows = findRowsForWorkload(board, sprintName);
+  var modal = document.getElementById('workload-modal');
+  if (!modal) return;
+  var subtitle = document.getElementById('workload-modal-sprint');
+  var body     = document.getElementById('workload-modal-body');
+  var label    = sprintName && !/^\d+ sprints$/.test(sprintName)
+    ? sprintName
+    : board + ' · ' + (rows.length ? rows.length + ' sprints' : '0 sprints');
+  if (subtitle) subtitle.textContent = label;
+  if (body)     body.innerHTML       = renderWorkloadTable(rows);
+  modal.classList.add('open');
+}
+function closeWorkloadModal(e) {
+  // Backdrop click vs inner click — only close when the click target is the
+  // overlay itself or the explicit close button.
+  if (e && e.target && e.target.id !== 'workload-modal' && !e.target.classList.contains('modal-close')) return;
+  var modal = document.getElementById('workload-modal');
+  if (modal) modal.classList.remove('open');
+}
+document.addEventListener('keydown', function(e){
+  if (e.key === 'Escape') closeWorkloadModal();
+});
+// Delegated click handler for the ⋯ workload trigger on every board card.
+document.addEventListener('click', function(e){
+  var btn = e.target && e.target.closest && e.target.closest('.js-workload-trigger');
+  if (!btn) return;
+  openWorkloadModal(btn.getAttribute('data-board'), btn.getAttribute('data-sprint-name'));
+});
+
+// Bucket every ticket across one or more sprint rows into the three Jira-style
+// buckets shown in its sprint header (To Do / In Progress / Done).
+// Walks epicBreakdown[].tickets[].status; same alias map as aggregateTickets()
+// inside renderBoardHealthGrid so the chips and the type breakdown agree.
+var WORKLOAD_STATUS_ALIAS = {
+  'Dev Complete': 'Development Complete',
+  'Done':         'Accepted',
+  'To Do':        'Ready to Start',
+  'Acceptance':   'Accepted',
+};
+function bucketStatusFromRows(rows) {
+  var DONE_KEYS    = { 'Accepted': 1 };
+  var IN_PROG_KEYS = { 'In Progress': 1, 'Test Complete': 1, 'Development Complete': 1, 'Pending Approval': 1 };
+  var done = 0, inprog = 0, todo = 0;
+  (rows || []).forEach(function(d){
+    (d.epicBreakdown || []).forEach(function(epic){
+      (epic.tickets || []).forEach(function(t){
+        var s = WORKLOAD_STATUS_ALIAS[t.status] || t.status || 'Unknown';
+        if      (DONE_KEYS[s])    done++;
+        else if (IN_PROG_KEYS[s]) inprog++;
+        else                      todo++;
+      });
+    });
+  });
+  return { todo: todo, inprog: inprog, done: done };
 }
 
 function toggleStatusGroup(grpId, hdrRow) {
@@ -3605,5 +3865,18 @@ function syncMainToDrawer() { updateMobFilterBadge(); }
 // Place bank on load and on resize
 window.addEventListener('resize', function() { placeFilterBank(); }, { passive: true });
 </script>
+
+<!-- Workload-by-assignee modal (mirrors Jira's "Workload by assignee" panel) -->
+<div class="modal-overlay" id="workload-modal" onclick="closeWorkloadModal(event)">
+  <div class="modal-card" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h3>Workload by assignee</h3>
+      <button class="modal-close" onclick="closeWorkloadModal(event)" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-subtitle" id="workload-modal-sprint"></div>
+    <div id="workload-modal-body"></div>
+  </div>
+</div>
+
 </body>
 </html>

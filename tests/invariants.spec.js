@@ -269,4 +269,49 @@ test.describe('Dashboard data invariants', () => {
     const ratio = offenders.length / Math.max(totalRows, 1);
     expect(ratio, `${offenders.length}/${totalRows} rows mismatch (>10%):\n` + JSON.stringify(offenders.slice(0, 10), null, 2)).toBeLessThan(0.1);
   });
+
+  // ─── Card layout invariants (Jira-style chips + workload modal) ────────────
+
+  test('every active board card renders three status chips that sum to its issue count', async ({ page }) => {
+    await page.locator('#f-status').selectOption('active');
+    await page.waitForTimeout(400);
+    const offenders = await page.locator('#board-health-grid .board-card').evaluateAll(cards => {
+      const out = [];
+      cards.forEach(card => {
+        const chipsEls = card.querySelectorAll('.bc-chip-num');
+        if (chipsEls.length === 0) return; // stub card with no work
+        const board = (card.querySelector('.bc-name') || {}).textContent || '';
+        const todo   = parseInt(chipsEls[0]?.textContent || '0', 10);
+        const inprog = parseInt(chipsEls[1]?.textContent || '0', 10);
+        const done   = parseInt(chipsEls[2]?.textContent || '0', 10);
+        const sum = todo + inprog + done;
+        const itemsTxt = (card.querySelector('.bc-issues-tip') || {}).textContent || '';
+        const itemsMatch = itemsTxt.match(/(\d+)/);
+        const items = itemsMatch ? parseInt(itemsMatch[1], 10) : -1;
+        if (items > 0 && sum > 0 && sum !== items) {
+          out.push({ board, todo, inprog, done, sum, items });
+        }
+      });
+      return out;
+    });
+    expect(offenders, 'cards where chip sum != items count:\n' + JSON.stringify(offenders, null, 2)).toEqual([]);
+  });
+
+  test('clicking a board card ⋯ button opens the workload modal with at least one assignee row', async ({ page }) => {
+    await page.locator('#f-status').selectOption('active');
+    await page.waitForTimeout(400);
+    // Pick the first card whose ⋯ button exists (i.e. has work)
+    const trigger = page.locator('.js-workload-trigger').first();
+    await expect(trigger).toBeVisible({ timeout: 5_000 });
+    await trigger.click();
+    const modal = page.locator('#workload-modal.open');
+    await expect(modal).toBeVisible({ timeout: 3_000 });
+    const dataRows = modal.locator('table.workload-table tbody tr:not(.workload-total)');
+    expect(await dataRows.count()).toBeGreaterThan(0);
+    // Total row exists and is bold
+    await expect(modal.locator('tr.workload-total')).toBeVisible();
+    // Close via ESC
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#workload-modal.open')).toHaveCount(0);
+  });
 });
