@@ -655,6 +655,34 @@ function insertRowIntoArray(lines, newRow) {
 // CSS.FY27.Q3.S19 and CSS.FY27.Q4.S19 are the "same" sprint number per FY).
 // Also rewrites each row's quarter field to the canonical mapping
 // (Q1: S0–S6, Q2: S7–S12, Q3: S13–S19, Q4: S20–S25). Idempotent.
+// Remove every {…issueType:'Sub-task'} object from epicBreakdown ticket arrays
+// in a single line. Used by dedupeSprintRows so legacy rows (rows that were
+// written before sub-tasks were filtered at the JQL level and that the current
+// sync run won't touch — e.g. future sprints that have rolled off Jira's
+// backlog) are also cleaned. Per-line operation; safe and idempotent.
+function stripSubtasksFromLine(line) {
+  // Match a single ticket object that has issueType:'Sub-task'. Tickets are
+  // serialized as {key:'X',title:'…',status:'…',sp:N,assignee:'…',issueType:'Sub-task'}
+  // with optional preceding comma. We strip the object plus its leading comma.
+  // If the sub-task is the first entry, the trailing comma is stripped instead.
+  // Keep going until no more matches — handles consecutive sub-tasks.
+  let stripped = 0;
+  let prev;
+  do {
+    prev = line;
+    line = line.replace(/,\{key:'[^']+',title:'(?:[^'\\]|\\.)*',status:'[^']*',sp:(?:null|-?\d+(?:\.\d+)?),assignee:'(?:[^'\\]|\\.)*',issueType:'Sub-task'\}/, () => { stripped++; return ''; });
+    if (line === prev) {
+      line = line.replace(/\{key:'[^']+',title:'(?:[^'\\]|\\.)*',status:'[^']*',sp:(?:null|-?\d+(?:\.\d+)?),assignee:'(?:[^'\\]|\\.)*',issueType:'Sub-task'\},?/, () => { stripped++; return ''; });
+    }
+  } while (line !== prev);
+  // Drop any epicBreakdown entries left with empty tickets after the strip,
+  // typically the "Other / Sub-tasks" bucket. Match the whole entry incl.
+  // trailing comma; if it's the last entry, the leading comma is stripped.
+  line = line.replace(/,\{key:(?:null|'[^']+'),label:'(?:[^'\\]|\\.)*',issues:\d+,sp:\d+(?:\.\d+)?,done:\d+(?:\.\d+)?,tickets:\[\]\}/g, '');
+  line = line.replace(/\{key:(?:null|'[^']+'),label:'(?:[^'\\]|\\.)*',issues:\d+,sp:\d+(?:\.\d+)?,done:\d+(?:\.\d+)?,tickets:\[\]\},?/g, '');
+  return { line, stripped };
+}
+
 function dedupeSprintRows(html) {
   const lines = html.split('\n');
   const seen = new Set();
@@ -662,6 +690,7 @@ function dedupeSprintRows(html) {
   let inArray = false;
   let dropped = 0;
   let requartered = 0;
+  let subtasksStripped = 0;
   const out = [];
   for (let line of lines) {
     if (!inArray && /var\s+ALL_SPRINTS_FY26\s*=\s*\[/.test(line)) {
@@ -695,12 +724,21 @@ function dedupeSprintRows(html) {
           if (updated !== line) requartered++;
           line = updated;
         }
+        // Strip any sub-task tickets left over from rows the current sync
+        // won't touch (legacy future/closed rows). Active and re-fetched
+        // sprints come back clean from the JQL filter; this catches the rest.
+        const stripResult = stripSubtasksFromLine(line);
+        if (stripResult.stripped > 0) {
+          subtasksStripped += stripResult.stripped;
+          line = stripResult.line;
+        }
       }
     }
     out.push(line);
   }
   if (dropped) console.log(`[INFO] dedupeSprintRows dropped ${dropped} duplicate/legacy row(s)`);
   if (requartered) console.log(`[INFO] dedupeSprintRows requartered ${requartered} row(s) to canonical Q`);
+  if (subtasksStripped) console.log(`[INFO] dedupeSprintRows stripped ${subtasksStripped} legacy sub-task ticket(s) from epicBreakdown`);
   return out.join('\n');
 }
 
