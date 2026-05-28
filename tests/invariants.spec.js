@@ -192,4 +192,81 @@ test.describe('Dashboard data invariants', () => {
     });
     expect(offenders, 'malformed rows:\n' + JSON.stringify(offenders, null, 2)).toEqual([]);
   });
+
+  // ─── Jira-accuracy invariants (sub-tasks excluded; drift surfaced) ─────────
+
+  test('no Sub-task appears in epicBreakdown.tickets after sync', async ({ page }) => {
+    const offenders = await page.evaluate(() => {
+      const out = [];
+      // @ts-ignore
+      (window.ALL_SPRINTS_FY26 || []).forEach(d => {
+        (d.epicBreakdown || []).forEach(epic => {
+          (epic.tickets || []).forEach(t => {
+            if (t.issueType && /sub-?task/i.test(t.issueType)) {
+              out.push({ sprint: d.sprintName, epic: epic.label, ticket: t.key, type: t.issueType });
+            }
+          });
+        });
+      });
+      return out;
+    });
+    expect(offenders, 'sub-tasks still present in epicBreakdown:\n' + JSON.stringify(offenders.slice(0, 20), null, 2)).toEqual([]);
+  });
+
+  test('doneSP never exceeds committedSP + addedSP for sprints with drift fields', async ({ page }) => {
+    const offenders = await page.evaluate(() => {
+      const out = [];
+      // @ts-ignore
+      (window.ALL_SPRINTS_FY26 || []).forEach(d => {
+        // Skip rows that pre-date the drift fields (legacy snapshots)
+        if (typeof d.addedSP !== 'number') return;
+        const ceiling = (d.committedSP || 0) + (d.addedSP || 0);
+        // Allow 1 SP slack for floating-point rounding in r1()
+        if (d.doneSP > ceiling + 1) {
+          out.push({ sprint: d.sprintName, doneSP: d.doneSP, committedSP: d.committedSP, addedSP: d.addedSP, ceiling });
+        }
+      });
+      return out;
+    });
+    expect(offenders, 'rows where doneSP > committedSP + addedSP:\n' + JSON.stringify(offenders, null, 2)).toEqual([]);
+  });
+
+  test('issues count matches sum of epicBreakdown[].tickets.length', async ({ page }) => {
+    const offenders = await page.evaluate(() => {
+      const out = [];
+      // @ts-ignore
+      (window.ALL_SPRINTS_FY26 || []).forEach(d => {
+        if (!Array.isArray(d.epicBreakdown)) return;
+        const ticketSum = d.epicBreakdown.reduce((n, e) => n + ((e.tickets || []).length), 0);
+        // Allow 0-issues sprints to mismatch (no breakdown built)
+        if (d.issues > 0 && ticketSum > 0 && ticketSum !== d.issues) {
+          out.push({ sprint: d.sprintName, issues: d.issues, ticketSum });
+        }
+      });
+      return out;
+    });
+    // This is a soft signal — divergence could happen during a sync mid-flight.
+    // We only fail if more than 10% of rows mismatch.
+    const totalRows = await page.evaluate(() => (window.ALL_SPRINTS_FY26 || []).length);
+    const ratio = offenders.length / Math.max(totalRows, 1);
+    expect(ratio, `${offenders.length}/${totalRows} rows mismatch (>10%):\n` + JSON.stringify(offenders.slice(0, 10), null, 2)).toBeLessThan(0.1);
+  });
+
+  test('issues count matches sum of ticketsPerDev[].tickets', async ({ page }) => {
+    const offenders = await page.evaluate(() => {
+      const out = [];
+      // @ts-ignore
+      (window.ALL_SPRINTS_FY26 || []).forEach(d => {
+        if (!Array.isArray(d.ticketsPerDev)) return;
+        const sum = d.ticketsPerDev.reduce((n, e) => n + (e.tickets || 0), 0);
+        if (d.issues > 0 && sum > 0 && sum !== d.issues) {
+          out.push({ sprint: d.sprintName, issues: d.issues, devSum: sum });
+        }
+      });
+      return out;
+    });
+    const totalRows = await page.evaluate(() => (window.ALL_SPRINTS_FY26 || []).length);
+    const ratio = offenders.length / Math.max(totalRows, 1);
+    expect(ratio, `${offenders.length}/${totalRows} rows mismatch (>10%):\n` + JSON.stringify(offenders.slice(0, 10), null, 2)).toBeLessThan(0.1);
+  });
 });

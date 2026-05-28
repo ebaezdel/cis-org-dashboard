@@ -242,6 +242,8 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-s
 .bc-bar{height:4px;background:var(--surface2);border-radius:2px;margin:6px 0;overflow:hidden;}
 .bc-bar-fill{height:100%;border-radius:2px;transition:width .5s;}
 .bc-meta{display:flex;justify-content:space-between;font-size:10px;color:var(--muted);}
+.bc-drift{font-size:10px;color:var(--muted);font-style:italic;margin-top:6px;line-height:1.4;}
+.bc-drift::before{content:'⚠ ';color:var(--yellow);font-style:normal;opacity:.7;}
 .bc-info{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-top:6px;font-size:10px;color:var(--muted);}
 .bc-info .bc-sprint{font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;}
 .bc-info .bc-dates{color:var(--muted2);font-size:9px;letter-spacing:.2px;}
@@ -2287,6 +2289,26 @@ function renderBoardHealthGrid(containerId) {
     return { statusCounts: statusCounts, typeCounts: typeCounts };
   }
 
+  // When dashboard numbers diverge from what's visible in Jira's UI for a
+  // legitimate reason (mid-sprint scope creep, sub-tasks folded under their
+  // parent), surface a small inline note so the user knows the gap is
+  // explained — not a bug. Returns '' when there's nothing to show.
+  function buildDriftHTML(d) {
+    if (d._multiSprint) return '';
+    var addedSP     = +d.addedSP || 0;
+    var addedIssues = +d.addedIssues || 0;
+    var subtasks    = +d.subtaskCount || 0;
+    var parts = [];
+    if (addedSP > 0 || addedIssues > 0) {
+      parts.push('+' + addedSP + ' SP added mid-sprint (' + addedIssues + ' ' + (addedIssues === 1 ? 'issue' : 'issues') + ')');
+    }
+    if (subtasks > 0) {
+      parts.push(subtasks + ' sub-task' + (subtasks === 1 ? '' : 's') + ' hidden from count');
+    }
+    if (!parts.length) return '';
+    return '<div class="bc-drift">' + parts.join(' · ') + '</div>';
+  }
+
   function buildBreakdownHTML(d) {
     var rows = (d._multiSprint && Array.isArray(d._sourceRows)) ? d._sourceRows : [d];
     var agg = aggregateTickets(rows);
@@ -2374,9 +2396,10 @@ function renderBoardHealthGrid(containerId) {
         '<span>' + (isNone ? '— SP' : 'Committed ' + d.committedSP + ' SP · Completed ' + d.doneSP + ' SP') + '</span>' +
         (isNone
           ? '<span>—</span>'
-          : '<span class="bc-issues-tip" data-tip="Including sub-tasks">' + d.issues + ' issues</span>') +
+          : '<span class="bc-issues-tip" data-tip="Matches Jira’s work-item count (sub-tasks excluded)">' + d.issues + ' issues</span>') +
       '</div>' +
       (isNone ? '' : buildBreakdownHTML(d)) +
+      (isNone ? '' : buildDriftHTML(d)) +
       '<div class="bc-info">' +
         '<span class="bc-sprint">' + sprintLabel + '</span>' +
         ((!isNone && d.startDate && !d._multiSprint) ? '<span class="bc-sep">·</span><span class="bc-dates">' + d.startDate + ' → ' + (d.endDate || '?') + '</span>' : '') +

@@ -84,7 +84,12 @@ async function fetchIssues(board, sprintClause) {
     'summary', 'status', 'assignee', 'issuetype', 'labels',
     'customfield_10034', 'customfield_10016', 'customfield_10020', 'parent', 'issuelinks',
   ].join(',');
-  const jql = encodeURIComponent(`project = ${board} AND sprint in ${sprintClause} ORDER BY created ASC`);
+  // Exclude Sub-tasks so dashboard work-item counts match Jira's board view —
+  // Jira folds sub-tasks under their parent Story in the sprint UI, but the
+  // raw `sprint = X` JQL returns them as siblings. Their SP (when present)
+  // also inflates totalSP. Sub-task detail still surfaces through the parent
+  // story's epicBreakdown entry.
+  const jql = encodeURIComponent(`project = ${board} AND sprint in ${sprintClause} AND issuetype != Sub-task ORDER BY created ASC`);
 
   let issues = [];
   let nextPageToken;
@@ -107,7 +112,7 @@ async function fetchIssuesBySprintName(board, sprintName) {
     'summary', 'status', 'assignee', 'issuetype', 'labels',
     'customfield_10034', 'customfield_10016', 'customfield_10020', 'parent', 'issuelinks',
   ].join(',');
-  const jql = encodeURIComponent(`project = ${board} AND sprint = "${sprintName}" ORDER BY created ASC`);
+  const jql = encodeURIComponent(`project = ${board} AND sprint = "${sprintName}" AND issuetype != Sub-task ORDER BY created ASC`);
 
   let issues = [];
   let nextPageToken;
@@ -136,7 +141,7 @@ async function fetchIssuesByKeys(keys) {
   // chunk to avoid 414 URI Too Long
   for (let i = 0; i < keys.length; i += 80) {
     const slice = keys.slice(i, i + 80);
-    const jql = encodeURIComponent(`key in (${slice.join(',')})`);
+    const jql = encodeURIComponent(`key in (${slice.join(',')}) AND issuetype != Sub-task`);
     let nextPageToken;
     while (true) {
       const qs = nextPageToken
@@ -218,7 +223,17 @@ async function fetchSprintSnapshot(boardId, sprintId) {
   // mid-sprint additions — those are excluded from velocity chart).
   const allKeys = [...completed, ...notCompleted, ...punted, ...completedOutside].filter(k => !added.has(k));
 
-  return { contents: c, completed, notCompleted, punted, completedOutside, added, initialSP, snapStatus, allKeys };
+  // Greenhopper exposes per-issue typeName for some fields and not others.
+  // Walk every array and capture the type per key when present so the caller
+  // can derive subtaskCount without a follow-up JQL.
+  const typeNameByKey = {};
+  for (const arr of [c.completedIssues, c.issuesNotCompletedInCurrentSprint, c.puntedIssues, c.issuesCompletedInAnotherSprint]) {
+    (arr || []).forEach(i => {
+      if (i.typeName) typeNameByKey[i.key] = i.typeName;
+    });
+  }
+
+  return { contents: c, completed, notCompleted, punted, completedOutside, added, initialSP, snapStatus, allKeys, typeNameByKey };
 }
 
 // Apply the Greenhopper snapshot onto a Jira-issue list so closed-sprint
@@ -294,11 +309,30 @@ async function fetchSprintReport(boardId, sprintId) {
   );
   const pendingSP   = r1(c.issuesNotCompletedEstimateSum?.value        ?? 0);
   const totalSP     = r1(doneSP + pendingSP);
-  // Issue count excludes mid-sprint adds (matches velocity chart denominator).
-  const issues      = completedIssues.filter(i => !added.has(i.key)).length
-                    + notCompleted.filter(i => !added.has(i.key)).length
-                    + punted.filter(i => !added.has(i.key)).length
-                    + completedOutside.filter(i => !added.has(i.key)).length;
+  // Issue count excludes mid-sprint adds AND sub-tasks (matches Jira's board
+  // view denominator). Sub-tasks are folded under their parent in the Jira
+  // UI; counting them as separate work items would inflate by ~25-50%.
+  const isSubtask = (i) => /sub-?task/i.test(i.typeName || '');
+  const countMain = (arr) => (arr || []).filter(i => !added.has(i.key) && !isSubtask(i)).length;
+  const issues = countMain(completedIssues) + countMain(notCompleted) + countMain(punted) + countMain(completedOutside);
+
+  // Drift surface — what the dashboard hides vs. shows so we can render
+  // an explanatory note on the card when these are non-zero.
+  const sumAdded = (arr) => (arr || []).reduce((s, i) => {
+    if (!added.has(i.key)) return s;
+    const v = i.estimateStatistic?.statFieldValue?.value;
+    return s + (typeof v === 'number' ? v : 0);
+  }, 0);
+  const addedIssues = (
+    [completedIssues, notCompleted, punted, completedOutside].reduce((n, arr) =>
+      n + (arr || []).filter(i => added.has(i.key) && !isSubtask(i)).length, 0)
+  );
+  const addedSP = r1(sumAdded(completedIssues) + sumAdded(notCompleted) + sumAdded(punted) + sumAdded(completedOutside));
+  const subtaskCount = (
+    [completedIssues, notCompleted, punted, completedOutside].reduce((n, arr) =>
+      n + (arr || []).filter(i => !added.has(i.key) && isSubtask(i)).length, 0)
+  );
+
   const spRes       = pct(doneSP, committedSP);
 
   return {
@@ -310,6 +344,9 @@ async function fetchSprintReport(boardId, sprintId) {
     committedSP,
     spRes,
     velocity: spRes,
+    addedIssues,
+    addedSP,
+    subtaskCount,
   };
 }
 
@@ -337,7 +374,7 @@ function calcMetrics(issues) {
   const inProgSP  = r1(issues.filter(isInProgress).reduce((s, i) => s + sp(i), 0));
   const pendingSP = r1(totalSP - doneSP);
   const spRes     = pct(doneSP, totalSP);
-  return { issues: issues.length, totalSP, doneSP, pendingSP, inProgressSP: inProgSP, committedSP: totalSP, spRes, velocity: spRes };
+  return { issues: issues.length, totalSP, doneSP, pendingSP, inProgressSP: inProgSP, committedSP: totalSP, spRes, velocity: spRes, addedIssues: 0, addedSP: 0, subtaskCount: 0 };
 }
 
 // ─── Epic / effort / dev breakdown builders ───────────────────────────────────
@@ -450,8 +487,10 @@ function serializeTicketsPerDev(arr) {
 // ─── HTML patcher ─────────────────────────────────────────────────────────────
 
 // deltaSP may appear between committedSP and spRes in some rows — capture it so
-// it can be re-emitted unchanged in the replacement string.
-const METRICS_RE = /, issues:\d+(?:\.\d+)?, totalSP:\d+(?:\.\d+)?, doneSP:\d+(?:\.\d+)?, pendingSP:\d+(?:\.\d+)?, inProgressSP:\d+(?:\.\d+)?, committedSP:\d+(?:\.\d+)?(, deltaSP:[^,]+)?, spRes:\d+, velocity:\d+/;
+// it can be re-emitted unchanged in the replacement string. The trailing drift
+// fields (addedIssues/addedSP/subtaskCount) are optional in the source so the
+// regex still matches legacy rows; metricsRepl always re-emits them.
+const METRICS_RE = /, issues:\d+(?:\.\d+)?, totalSP:\d+(?:\.\d+)?, doneSP:\d+(?:\.\d+)?, pendingSP:\d+(?:\.\d+)?, inProgressSP:\d+(?:\.\d+)?, committedSP:\d+(?:\.\d+)?(, deltaSP:[^,]+)?, spRes:\d+, velocity:\d+(?:, addedIssues:\d+, addedSP:\d+(?:\.\d+)?, subtaskCount:\d+)?/;
 
 const PAYLOAD_RE = /, epicBreakdown:\[.*?\], effortBreakdown:\{[^}]*\}(?:, _hasStatusBreakdown:true)?(?:, ticketsPerDev:\[.*?\])?(?=\})/;
 
@@ -478,7 +517,7 @@ function groupBySprint(issues, targetState) {
 }
 
 function patchHTMLBySprintName(html, sprintName, sprintStatus, m, epicBreakdown, effortBreakdown, ticketsPerDev, sprintGoal, board, em, startDate, endDate) {
-  const metricsRepl      = `, issues:${m.issues}, totalSP:${m.totalSP}, doneSP:${m.doneSP}, pendingSP:${m.pendingSP}, inProgressSP:${m.inProgressSP}, committedSP:${m.committedSP}$1, spRes:${m.spRes}, velocity:${m.velocity}`;
+  const metricsRepl      = `, issues:${m.issues}, totalSP:${m.totalSP}, doneSP:${m.doneSP}, pendingSP:${m.pendingSP}, inProgressSP:${m.inProgressSP}, committedSP:${m.committedSP}$1, spRes:${m.spRes}, velocity:${m.velocity}, addedIssues:${m.addedIssues || 0}, addedSP:${m.addedSP || 0}, subtaskCount:${m.subtaskCount || 0}`;
   const payloadRepl      = `, epicBreakdown:${serializeEpicBreakdown(epicBreakdown)}, effortBreakdown:${serializeObj(effortBreakdown)}, _hasStatusBreakdown:true, ticketsPerDev:${serializeTicketsPerDev(ticketsPerDev)}`;
   const sprintStatusRepl = `sprintStatus:'${sprintStatus}'`;
 
@@ -558,7 +597,7 @@ function buildNewSprintRow(opts) {
   const m    = opts.metrics;
   const startStr = opts.startDate ? opts.startDate.slice(0, 10) : '';
   const endStr   = opts.endDate   ? opts.endDate.slice(0, 10)   : '';
-  return `  {em:${jsStr(opts.em)}, board:${jsStr(opts.board)}, sprintName:${jsStr(opts.sprintName)}, sprintGoal:${jsStr(opts.sprintGoal)}, sprintStatus:'${opts.sprintStatus}', startDate:${jsStr(startStr)}, endDate:${jsStr(endStr)}, fy:${jsStr(meta.fy)}, quarter:${jsStr(meta.quarter)}, sprint:${meta.sprintNum}, issues:${m.issues}, totalSP:${m.totalSP}, doneSP:${m.doneSP}, pendingSP:${m.pendingSP}, inProgressSP:${m.inProgressSP}, committedSP:${m.committedSP}, spRes:${m.spRes}, velocity:${m.velocity}, unplannedPct:0, plannedPct:100, deltaSP:0, backlogSprints:0, epicBreakdown:${serializeEpicBreakdown(opts.epicBreakdown)}, effortBreakdown:${serializeObj(opts.effortBreakdown)}, _hasStatusBreakdown:true, ticketsPerDev:${serializeTicketsPerDev(opts.ticketsPerDev)}},`;
+  return `  {em:${jsStr(opts.em)}, board:${jsStr(opts.board)}, sprintName:${jsStr(opts.sprintName)}, sprintGoal:${jsStr(opts.sprintGoal)}, sprintStatus:'${opts.sprintStatus}', startDate:${jsStr(startStr)}, endDate:${jsStr(endStr)}, fy:${jsStr(meta.fy)}, quarter:${jsStr(meta.quarter)}, sprint:${meta.sprintNum}, issues:${m.issues}, totalSP:${m.totalSP}, doneSP:${m.doneSP}, pendingSP:${m.pendingSP}, inProgressSP:${m.inProgressSP}, committedSP:${m.committedSP}, spRes:${m.spRes}, velocity:${m.velocity}, addedIssues:${m.addedIssues || 0}, addedSP:${m.addedSP || 0}, subtaskCount:${m.subtaskCount || 0}, unplannedPct:0, plannedPct:100, deltaSP:0, backlogSprints:0, epicBreakdown:${serializeEpicBreakdown(opts.epicBreakdown)}, effortBreakdown:${serializeObj(opts.effortBreakdown)}, _hasStatusBreakdown:true, ticketsPerDev:${serializeTicketsPerDev(opts.ticketsPerDev)}},`;
 }
 
 // Locate the closing `];` of `var ALL_SPRINTS_FY26 = [` and insert the new row
@@ -666,7 +705,7 @@ function dedupeSprintRows(html) {
 }
 
 function patchHTML(html, board, sprintStatus, m, epicBreakdown, effortBreakdown, ticketsPerDev) {
-  const metricsRepl      = `, issues:${m.issues}, totalSP:${m.totalSP}, doneSP:${m.doneSP}, pendingSP:${m.pendingSP}, inProgressSP:${m.inProgressSP}, committedSP:${m.committedSP}$1, spRes:${m.spRes}, velocity:${m.velocity}`;
+  const metricsRepl      = `, issues:${m.issues}, totalSP:${m.totalSP}, doneSP:${m.doneSP}, pendingSP:${m.pendingSP}, inProgressSP:${m.inProgressSP}, committedSP:${m.committedSP}$1, spRes:${m.spRes}, velocity:${m.velocity}, addedIssues:${m.addedIssues || 0}, addedSP:${m.addedSP || 0}, subtaskCount:${m.subtaskCount || 0}`;
   const payloadRepl      = `, epicBreakdown:${serializeEpicBreakdown(epicBreakdown)}, effortBreakdown:${serializeObj(effortBreakdown)}, _hasStatusBreakdown:true, ticketsPerDev:${serializeTicketsPerDev(ticketsPerDev)}`;
   const sprintStatusRepl = `sprintStatus:'${sprintStatus}'`;
 
@@ -771,16 +810,22 @@ async function processBoard({ board, boardId, em }) {
 
   // ── Scrum board — Agile + Greenhopper sprint report path ─────────────────
 
-  // Active sprint — live JQL so the card matches Jira's Active sprints view
-  // (mid-sprint additions included). Greenhopper snapshot is for closed only.
+  // Active sprint — Greenhopper sprint report is the source of truth Jira's
+  // own Sprint Report UI reads from. Using it for active sprints (not just
+  // closed) means committedSP matches Jira's "Commitment" column exactly,
+  // doneSP matches "Completed", and the work-item count matches the board.
+  // Mid-sprint adds are surfaced as drift fields rather than silently
+  // inflating committedSP.
   try {
     const activeSprints = await fetchSprintList(boardId, 'active');
     if (!activeSprints.length) {
       log(`${tag} active... (no active sprint)`);
     } else {
       const sprint          = activeSprints[0];
-      const issues          = await fetchIssuesBySprintName(board, sprint.name);
-      const metrics         = calcMetrics(issues);
+      const snap            = await fetchSprintSnapshot(boardId, sprint.id);
+      const metrics         = await fetchSprintReport(boardId, sprint.id);
+      const rawIssues       = await fetchIssuesByKeys(snap.allKeys);
+      const issues          = applySnapshotToIssues(rawIssues, snap);
       const epicBreakdown   = buildEpicBreakdown(issues);
       const effortBreakdown = buildEffortBreakdown(issues);
       const ticketsPerDev   = buildTicketsPerDev(issues);
