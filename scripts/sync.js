@@ -686,7 +686,154 @@ function patchHTML(html, board, sprintStatus, m, epicBreakdown, effortBreakdown,
   return result.join('\n');
 }
 
+// ─── Concurrency helper ──────────────────────────────────────────────────────
+
+// Run `fn` over `items` with at most `limit` in flight at any time. Preserves
+// input order in the returned array. We only have outbound HTTP I/O, so a
+// pool is enough — no need for a heavier scheduler.
+async function pool(items, limit, fn) {
+  const results = new Array(items.length);
+  let next = 0;
+  async function worker() {
+    while (true) {
+      const i = next++;
+      if (i >= items.length) return;
+      results[i] = await fn(items[i], i);
+    }
+  }
+  const n = Math.min(limit, items.length) || 1;
+  await Promise.all(Array.from({ length: n }, worker));
+  return results;
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
+
+// Boards run in parallel; sprints within a board also run in parallel. All
+// HTML mutation happens after every fetch finishes (fan-out / fan-in), so
+// patch order is deterministic and string-mutation logic stays intact.
+const BOARD_CONCURRENCY  = 6;
+const SPRINT_CONCURRENCY = 4;
+
+async function processBoard({ board, boardId, em }) {
+  const logs = [];
+  const patches = [];
+  const log = (...args) => logs.push(args.join(''));
+  const tag = `  [${board.padEnd(6)}]`;
+
+  if (boardId == null) {
+    // ── Kanban / no scrum board — JQL-only path (legacy behaviour) ──────────
+    try {
+      const issues          = await fetchIssues(board, 'openSprints()');
+      const metrics         = calcMetrics(issues);
+      const epicBreakdown   = buildEpicBreakdown(issues);
+      const effortBreakdown = buildEffortBreakdown(issues);
+      const ticketsPerDev   = buildTicketsPerDev(issues);
+      patches.push({ kind: 'patch', args: [board, 'active', metrics, epicBreakdown, effortBreakdown, ticketsPerDev] });
+      log(`${tag} (kanban) active... ${String(issues.length).padStart(3)} issues — totalSP:${metrics.totalSP}  doneSP:${metrics.doneSP}  (${metrics.spRes}%)`);
+    } catch (err) { log(`${tag} (kanban) active... FAILED — ${err.message}`); }
+
+    try {
+      const issues = await fetchIssues(board, 'futureSprints()');
+      if (!issues.length) { log(`${tag} (kanban) future... (no future sprint)`); }
+      else {
+        const byName = groupBySprint(issues, 'future');
+        const entries = Object.entries(byName);
+        for (const [name, sprintIssues] of entries) {
+          const metrics         = calcMetrics(sprintIssues);
+          const epicBreakdown   = buildEpicBreakdown(sprintIssues);
+          const effortBreakdown = buildEffortBreakdown(sprintIssues);
+          const ticketsPerDev   = buildTicketsPerDev(sprintIssues);
+          patches.push({ kind: 'patchByName', args: [name, 'future', metrics, epicBreakdown, effortBreakdown, ticketsPerDev, '', board, em, '', ''] });
+        }
+        log(`${tag} (kanban) future... ${entries.length} future sprints synced`);
+      }
+    } catch (err) { log(`${tag} (kanban) future... FAILED — ${err.message}`); }
+
+    try {
+      const issues = await fetchIssues(board, 'closedSprints()');
+      if (!issues.length) { log(`${tag} (kanban) closed... (none)`); }
+      else {
+        const byName = groupBySprint(issues, 'closed');
+        const entries = Object.entries(byName);
+        for (const [name, sprintIssues] of entries) {
+          const metrics         = calcMetrics(sprintIssues);
+          const epicBreakdown   = buildEpicBreakdown(sprintIssues);
+          const effortBreakdown = buildEffortBreakdown(sprintIssues);
+          const ticketsPerDev   = buildTicketsPerDev(sprintIssues);
+          patches.push({ kind: 'patchByName', args: [name, 'closed', metrics, epicBreakdown, effortBreakdown, ticketsPerDev, '', board, em, '', ''] });
+        }
+        log(`${tag} (kanban) closed... ${entries.length} closed sprints synced`);
+      }
+    } catch (err) { log(`${tag} (kanban) closed... FAILED — ${err.message}`); }
+
+    return { board, logs, patches };
+  }
+
+  // ── Scrum board — Agile + Greenhopper sprint report path ─────────────────
+
+  // Active sprint — live JQL so the card matches Jira's Active sprints view
+  // (mid-sprint additions included). Greenhopper snapshot is for closed only.
+  try {
+    const activeSprints = await fetchSprintList(boardId, 'active');
+    if (!activeSprints.length) {
+      log(`${tag} active... (no active sprint)`);
+    } else {
+      const sprint          = activeSprints[0];
+      const issues          = await fetchIssuesBySprintName(board, sprint.name);
+      const metrics         = calcMetrics(issues);
+      const epicBreakdown   = buildEpicBreakdown(issues);
+      const effortBreakdown = buildEffortBreakdown(issues);
+      const ticketsPerDev   = buildTicketsPerDev(issues);
+      const goal            = sprint.goal || await fetchSprintGoal(sprint.id);
+      patches.push({ kind: 'patchByName', args: [sprint.name, 'active', metrics, epicBreakdown, effortBreakdown, ticketsPerDev, goal, board, em, sprint.startDate, sprint.endDate] });
+      log(`${tag} active... ${String(metrics.issues).padStart(3)} issues — committedSP:${metrics.committedSP}  doneSP:${metrics.doneSP}  (${metrics.spRes}%)`);
+    }
+  } catch (err) { log(`${tag} active... FAILED — ${err.message}`); }
+
+  // Future sprints — fan out within the board
+  try {
+    const futureSprints = await fetchSprintList(boardId, 'future');
+    if (!futureSprints.length) {
+      log(`${tag} future... (no future sprints)`);
+    } else {
+      const ops = await pool(futureSprints, SPRINT_CONCURRENCY, async (sprint) => {
+        const issues          = await fetchIssuesBySprintName(board, sprint.name);
+        const metrics         = calcMetrics(issues);
+        const epicBreakdown   = buildEpicBreakdown(issues);
+        const effortBreakdown = buildEffortBreakdown(issues);
+        const ticketsPerDev   = buildTicketsPerDev(issues);
+        const goal            = sprint.goal || await fetchSprintGoal(sprint.id);
+        return { kind: 'patchByName', args: [sprint.name, 'future', metrics, epicBreakdown, effortBreakdown, ticketsPerDev, goal, board, em, sprint.startDate, sprint.endDate] };
+      });
+      for (const p of ops) patches.push(p);
+      log(`${tag} future... ${futureSprints.length} future sprints synced`);
+    }
+  } catch (err) { log(`${tag} future... FAILED — ${err.message}`); }
+
+  // Closed sprints — Greenhopper snapshot (immutable, matches velocity chart)
+  try {
+    const closedSprints = await fetchSprintList(boardId, 'closed');
+    if (!closedSprints.length) {
+      log(`${tag} closed... (none)`);
+    } else {
+      const ops = await pool(closedSprints, SPRINT_CONCURRENCY, async (sprint) => {
+        const snap            = await fetchSprintSnapshot(boardId, sprint.id);
+        const metrics         = await fetchSprintReport(boardId, sprint.id);
+        const rawIssues       = await fetchIssuesByKeys(snap.allKeys);
+        const issues          = applySnapshotToIssues(rawIssues, snap);
+        const epicBreakdown   = buildEpicBreakdown(issues);
+        const effortBreakdown = buildEffortBreakdown(issues);
+        const ticketsPerDev   = buildTicketsPerDev(issues);
+        const goal            = sprint.goal || await fetchSprintGoal(sprint.id);
+        return { kind: 'patchByName', args: [sprint.name, 'closed', metrics, epicBreakdown, effortBreakdown, ticketsPerDev, goal, board, em, sprint.startDate, sprint.endDate] };
+      });
+      for (const p of ops) patches.push(p);
+      log(`${tag} closed... ${closedSprints.length} closed sprints synced`);
+    }
+  } catch (err) { log(`${tag} closed... FAILED — ${err.message}`); }
+
+  return { board, logs, patches };
+}
 
 async function main() {
   if (!process.env.JIRA_EMAIL || !process.env.JIRA_API_TOKEN) {
@@ -699,137 +846,20 @@ async function main() {
   let html = fs.readFileSync(HTML_PATH, 'utf8');
   html = dedupeSprintRows(html);
 
-  for (const { board, boardId, em } of BOARDS) {
-    const hasBoard = boardId != null;
+  const t0 = Date.now();
+  const boardResults = await pool(BOARDS, BOARD_CONCURRENCY, processBoard);
 
-    if (!hasBoard) {
-      // ── Kanban / no scrum board — JQL-only path (legacy behaviour) ──────────
-      process.stdout.write(`  [${board.padEnd(6)}] (kanban) active... `);
-      try {
-        const issues          = await fetchIssues(board, 'openSprints()');
-        const metrics         = calcMetrics(issues);
-        const epicBreakdown   = buildEpicBreakdown(issues);
-        const effortBreakdown = buildEffortBreakdown(issues);
-        const ticketsPerDev   = buildTicketsPerDev(issues);
-        html = patchHTML(html, board, 'active', metrics, epicBreakdown, effortBreakdown, ticketsPerDev);
-        console.log(`${String(issues.length).padStart(3)} issues — totalSP:${metrics.totalSP}  doneSP:${metrics.doneSP}  (${metrics.spRes}%)`);
-      } catch (err) { console.log(`FAILED — ${err.message}`); }
-
-      process.stdout.write(`  [${board.padEnd(6)}] (kanban) future... `);
-      try {
-        const issues = await fetchIssues(board, 'futureSprints()');
-        if (!issues.length) { console.log('(no future sprint)'); }
-        else {
-          const byName = groupBySprint(issues, 'future');
-          let count = 0;
-          for (const [name, sprintIssues] of Object.entries(byName)) {
-            const metrics         = calcMetrics(sprintIssues);
-            const epicBreakdown   = buildEpicBreakdown(sprintIssues);
-            const effortBreakdown = buildEffortBreakdown(sprintIssues);
-            const ticketsPerDev   = buildTicketsPerDev(sprintIssues);
-            html = patchHTMLBySprintName(html, name, 'future', metrics, epicBreakdown, effortBreakdown, ticketsPerDev, '', board, em, '', '');
-            count++;
-          }
-          console.log(`${count} future sprints synced`);
-        }
-      } catch (err) { console.log(`FAILED — ${err.message}`); }
-
-      process.stdout.write(`  [${board.padEnd(6)}] (kanban) closed... `);
-      try {
-        const issues = await fetchIssues(board, 'closedSprints()');
-        if (!issues.length) { console.log('(none)'); }
-        else {
-          const byName = groupBySprint(issues, 'closed');
-          let count = 0;
-          for (const [name, sprintIssues] of Object.entries(byName)) {
-            const metrics         = calcMetrics(sprintIssues);
-            const epicBreakdown   = buildEpicBreakdown(sprintIssues);
-            const effortBreakdown = buildEffortBreakdown(sprintIssues);
-            const ticketsPerDev   = buildTicketsPerDev(sprintIssues);
-            html = patchHTMLBySprintName(html, name, 'closed', metrics, epicBreakdown, effortBreakdown, ticketsPerDev, '', board, em, '', '');
-            count++;
-          }
-          console.log(`${count} closed sprints synced`);
-        }
-      } catch (err) { console.log(`FAILED — ${err.message}`); }
-
-      continue;
+  // Apply patches serially in board-list order — patches target distinct
+  // sprintNames so order doesn't affect correctness, but a stable order keeps
+  // diffs and logs predictable.
+  for (const r of boardResults) {
+    for (const line of r.logs) console.log(line);
+    for (const p of r.patches) {
+      if (p.kind === 'patchByName') html = patchHTMLBySprintName(html, ...p.args);
+      else                          html = patchHTML(html, ...p.args);
     }
-
-    // ── Scrum board — Agile + Greenhopper sprint report path ─────────────────
-
-    // Active sprint
-    process.stdout.write(`  [${board.padEnd(6)}] active... `);
-    try {
-      const activeSprints = await fetchSprintList(boardId, 'active');
-      if (!activeSprints.length) {
-        console.log('(no active sprint)');
-      } else {
-        const sprint          = activeSprints[0];
-        // Active sprint = match what the user sees on Jira's "Active sprints"
-        // board view. Use live JQL `sprint = X` (current membership) which
-        // includes mid-sprint additions and current statuses. No Greenhopper
-        // snapshot here — that only matters once the sprint closes.
-        const issues          = await fetchIssuesBySprintName(board, sprint.name);
-        const metrics         = calcMetrics(issues);
-        const epicBreakdown   = buildEpicBreakdown(issues);
-        const effortBreakdown = buildEffortBreakdown(issues);
-        const ticketsPerDev   = buildTicketsPerDev(issues);
-        const goal            = sprint.goal || await fetchSprintGoal(sprint.id);
-        html = patchHTMLBySprintName(html, sprint.name, 'active', metrics, epicBreakdown, effortBreakdown, ticketsPerDev, goal, board, em, sprint.startDate, sprint.endDate);
-        console.log(`${String(metrics.issues).padStart(3)} issues — committedSP:${metrics.committedSP}  doneSP:${metrics.doneSP}  (${metrics.spRes}%)`);
-      }
-    } catch (err) { console.log(`FAILED — ${err.message}`); }
-
-    // Future sprints
-    process.stdout.write(`  [${board.padEnd(6)}] future... `);
-    try {
-      const futureSprints = await fetchSprintList(boardId, 'future');
-      if (!futureSprints.length) {
-        console.log('(no future sprints)');
-      } else {
-        let count = 0;
-        for (const sprint of futureSprints) {
-          const issues          = await fetchIssuesBySprintName(board, sprint.name);
-          const metrics         = calcMetrics(issues);
-          const epicBreakdown   = buildEpicBreakdown(issues);
-          const effortBreakdown = buildEffortBreakdown(issues);
-          const ticketsPerDev   = buildTicketsPerDev(issues);
-          const goal            = sprint.goal || await fetchSprintGoal(sprint.id);
-          html = patchHTMLBySprintName(html, sprint.name, 'future', metrics, epicBreakdown, effortBreakdown, ticketsPerDev, goal, board, em, sprint.startDate, sprint.endDate);
-          count++;
-        }
-        console.log(`${count} future sprints synced`);
-      }
-    } catch (err) { console.log(`FAILED — ${err.message}`); }
-
-    // Closed sprints — full snapshot from Greenhopper (immutable, matches velocity chart)
-    process.stdout.write(`  [${board.padEnd(6)}] closed... `);
-    try {
-      const closedSprints = await fetchSprintList(boardId, 'closed');
-      if (!closedSprints.length) {
-        console.log('(none)');
-      } else {
-        let count = 0;
-        for (const sprint of closedSprints) {
-          const snap            = await fetchSprintSnapshot(boardId, sprint.id);
-          const metrics         = await fetchSprintReport(boardId, sprint.id);
-          // Pull every issue that was in the sprint at close — by key, not by
-          // current-sprint-membership, so reassignments after close don't
-          // change what we render.
-          const rawIssues       = await fetchIssuesByKeys(snap.allKeys);
-          const issues          = applySnapshotToIssues(rawIssues, snap);
-          const epicBreakdown   = buildEpicBreakdown(issues);
-          const effortBreakdown = buildEffortBreakdown(issues);
-          const ticketsPerDev   = buildTicketsPerDev(issues);
-          const goal            = sprint.goal || await fetchSprintGoal(sprint.id);
-          html = patchHTMLBySprintName(html, sprint.name, 'closed', metrics, epicBreakdown, effortBreakdown, ticketsPerDev, goal, board, em, sprint.startDate, sprint.endDate);
-          count++;
-        }
-        console.log(`${count} closed sprints synced`);
-      }
-    } catch (err) { console.log(`FAILED — ${err.message}`); }
   }
+  console.log(`\nFan-out + fan-in completed in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
 
   const trigger = process.env.SYNC_TRIGGER === 'workflow_dispatch' ? 'manual' : 'schedule';
   html = html.replace(/id="data-banner"[^>]*/, `id="data-banner" data-synced-at="${new Date().toISOString()}" data-trigger="${trigger}"`);
