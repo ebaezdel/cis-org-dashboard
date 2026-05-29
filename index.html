@@ -442,12 +442,27 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-s
 /* Sprint Closeout — carryover analysis table */
 .closeout-wrap{background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:20px;}
 .closeout-empty{padding:24px;text-align:center;color:var(--muted);font-size:12px;}
-.closeout-summary{display:flex;align-items:center;gap:18px;padding:12px 18px;background:var(--surface2);border-bottom:1px solid var(--border);font-size:11px;color:var(--muted);flex-wrap:wrap;}
+.closeout-summary{display:flex;align-items:flex-end;gap:14px;padding:12px 18px;background:var(--surface2);border-bottom:1px solid var(--border);font-size:11px;color:var(--muted);flex-wrap:wrap;}
 .closeout-summary .stat{display:flex;align-items:baseline;gap:5px;}
 .closeout-summary .stat strong{color:var(--text);font-size:14px;font-weight:700;}
 .closeout-summary .stat.green strong{color:#16a34a;}
 .closeout-summary .stat.amber strong{color:#d97706;}
 .closeout-summary .stat.red strong{color:#dc2626;}
+/* KPI-style bucket stats — big SP first, items count in parens.
+   Mirrors the headline KPI cards so summaries read consistently. */
+.closeout-summary .kstat{display:flex;flex-direction:column;gap:3px;padding:6px 10px;border-radius:6px;min-width:78px;}
+.closeout-summary .kstat-num{font-size:18px;font-weight:700;line-height:1;display:inline-flex;align-items:baseline;gap:2px;}
+.closeout-summary .kstat-num .kstat-unit{font-size:10px;font-weight:600;opacity:.65;letter-spacing:.3px;margin-left:2px;}
+.closeout-summary .kstat-sub{font-size:10px;font-weight:500;opacity:.7;line-height:1.2;}
+.closeout-summary .kstat-label{font-size:8px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;opacity:.85;}
+.closeout-summary .kstat.k-todo{background:#f1f5f9;color:#475569;}
+.closeout-summary .kstat.k-inprog{background:#dbeafe;color:#1d4ed8;}
+.closeout-summary .kstat.k-done{background:#dcfce7;color:#15803d;}
+.closeout-summary .kstat.k-carryover{background:#fef3c7;color:#92400e;}
+.closeout-summary .kstat.k-cancelled{background:#f1f5f9;color:#64748b;}
+.closeout-summary .kstat-pct{display:flex;flex-direction:column;gap:3px;padding:6px 12px;border-left:1px solid var(--border);}
+.closeout-summary .kstat-pct-val{font-size:20px;font-weight:700;line-height:1;color:var(--text);}
+.closeout-summary .kstat-pct-label{font-size:9px;font-weight:600;letter-spacing:.3px;color:var(--muted);text-transform:uppercase;}
 .closeout-table{width:100%;border-collapse:collapse;font-size:12px;}
 .closeout-table th{text-align:left;padding:10px 12px;font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;background:var(--surface2);border-bottom:1px solid var(--border);white-space:nowrap;}
 .closeout-table th.num,.closeout-table td.num{text-align:right;}
@@ -3520,6 +3535,24 @@ function bucketPillsHTML(pills) {
   }).join('') + '</div>';
 }
 
+// KPI-style summary stat for the closeout-summary strip — big SP first,
+// item count as a sub-line, uppercase bucket label below. Mirrors the
+// headline KPI cards so the user sees the same shape end-to-end.
+function summaryKStatHTML(cls, sp, n, label) {
+  var spR = (Math.round((sp || 0) * 10) / 10);
+  return '<div class="kstat ' + cls + '" title="' + label + ' — ' + spR + ' SP across ' + n + ' item' + (n === 1 ? '' : 's') + '">' +
+    '<div class="kstat-num">' + spR + '<span class="kstat-unit">SP</span></div>' +
+    '<div class="kstat-sub">(' + n + (n === 1 ? ' item' : ' items') + ')</div>' +
+    '<div class="kstat-label">' + label + '</div>' +
+  '</div>';
+}
+function summaryKPctHTML(label, pct) {
+  return '<div class="kstat-pct">' +
+    '<div class="kstat-pct-val">' + pct + '%</div>' +
+    '<div class="kstat-pct-label">' + label + '</div>' +
+  '</div>';
+}
+
 function pctBand(p) {
   return p >= 80 ? 'green' : p >= 50 ? 'amber' : 'red';
 }
@@ -3700,13 +3733,11 @@ function renderClosedTable(el, rows, assigneeFilter) {
     '<div class="closeout-summary">' +
       assigneeBadge +
       '<div class="stat"><strong>' + rows.length + '</strong><span>sprints</span></div>' +
-      '<span class="bc-sep">·</span>' +
-      '<div class="stat green"><strong>' + tot.completed + '</strong><span>completed (' + Math.round(tot.completedSP * 10) / 10 + ' SP)</span></div>' +
-      '<div class="stat amber"><strong>' + tot.carryover + '</strong><span>carryover (' + Math.round(tot.carryoverSP * 10) / 10 + ' SP)</span></div>' +
-      '<div class="stat"><strong style="color:var(--muted)">' + tot.cancelled + '</strong><span>cancelled (' + Math.round(tot.cancelledSP * 10) / 10 + ' SP)</span></div>' +
-      '<span class="bc-sep">·</span>' +
-      '<div class="stat"><span>avg completion</span><strong>' + avgCompletion + '%</strong></div>' +
-      '<div class="stat"><span>carryover rate</span><strong>' + carryoverPct + '%</strong></div>' +
+      summaryKStatHTML('k-carryover', tot.carryoverSP, tot.carryover, 'Carryover') +
+      summaryKStatHTML('k-cancelled', tot.cancelledSP, tot.cancelled, 'Cancelled') +
+      summaryKStatHTML('k-done',      tot.completedSP, tot.completed, 'Done') +
+      summaryKPctHTML('Avg Sprint Resolution', avgCompletion) +
+      summaryKPctHTML('Carryover Rate',        carryoverPct) +
     '</div>' +
     '<table class="closeout-table">' +
       '<thead><tr>' +
@@ -3715,7 +3746,7 @@ function renderClosedTable(el, rows, assigneeFilter) {
         '<th class="num">Items</th>' +
         '<th class="num">SP</th>' +
         '<th>Distribution</th>' +
-        '<th class="num">% Complete</th>' +
+        '<th class="num">Sprint Resolution</th>' +
       '</tr></thead><tbody>';
 
   classified.forEach(function(entry, idx){
@@ -3737,15 +3768,15 @@ function renderClosedTable(el, rows, assigneeFilter) {
       '</td>' +
       '<td class="num">' + totalCount + '</td>' +
       '<td class="num">' + (Math.round(totalSP * 10) / 10) + '</td>' +
-      '<td><div class="closeout-bar" title="Completed ' + pctC + '% · Carryover ' + pctK + '% · Cancelled ' + pctX + '%">' +
-        '<span class="seg-completed" style="width:' + pctC + '%"></span>' +
+      '<td><div class="closeout-bar" title="Carryover ' + pctK + '% · Cancelled ' + pctX + '% · Completed ' + pctC + '%">' +
         '<span class="seg-carryover" style="width:' + pctK + '%"></span>' +
         '<span class="seg-cancelled" style="width:' + pctX + '%"></span>' +
+        '<span class="seg-completed" style="width:' + pctC + '%"></span>' +
       '</div>' +
       bucketPillsHTML([
-        { cls:'bp-done',      sp:c.completed.sp, n:c.completed.count, label:'Done' },
         { cls:'bp-carryover', sp:c.carryover.sp, n:c.carryover.count, label:'Carryover' },
         { cls:'bp-cancelled', sp:c.cancelled.sp, n:c.cancelled.count, label:'Cancelled' },
+        { cls:'bp-done',      sp:c.completed.sp, n:c.completed.count, label:'Done' },
       ]) +
       '</td>' +
       '<td class="num"><span class="closeout-pct ' + pctBand(pctC) + '">' + pctC + '%</span></td>' +
@@ -3800,12 +3831,10 @@ function renderActiveTable(el, rows, assigneeFilter) {
     '<div class="closeout-summary">' +
       assigneeBadge +
       '<div class="stat"><strong>' + rows.length + '</strong><span>active sprints</span></div>' +
-      '<span class="bc-sep">·</span>' +
-      '<div class="stat green"><strong>' + tot.done + '</strong><span>done (' + Math.round(tot.doneSP * 10) / 10 + ' SP)</span></div>' +
-      '<div class="stat blue"><strong>' + tot.inprog + '</strong><span>in progress (' + Math.round(tot.inprogSP * 10) / 10 + ' SP)</span></div>' +
-      '<div class="stat"><strong style="color:var(--muted)">' + tot.todo + '</strong><span>to do (' + Math.round(tot.todoSP * 10) / 10 + ' SP)</span></div>' +
-      '<span class="bc-sep">·</span>' +
-      '<div class="stat"><span>avg progress</span><strong>' + pctDone + '%</strong></div>' +
+      summaryKStatHTML('k-todo',   tot.todoSP,   tot.todo,   'To Do') +
+      summaryKStatHTML('k-inprog', tot.inprogSP, tot.inprog, 'In Progress') +
+      summaryKStatHTML('k-done',   tot.doneSP,   tot.done,   'Done') +
+      summaryKPctHTML('Avg Sprint Resolution', pctDone) +
     '</div>' +
     '<table class="closeout-table">' +
       '<thead><tr>' +
@@ -3814,7 +3843,7 @@ function renderActiveTable(el, rows, assigneeFilter) {
         '<th class="num">Items</th>' +
         '<th class="num">SP</th>' +
         '<th>Distribution</th>' +
-        '<th class="num">% Done</th>' +
+        '<th class="num">Sprint Resolution</th>' +
       '</tr></thead><tbody>';
 
   classified.forEach(function(entry, idx){
@@ -3834,15 +3863,15 @@ function renderActiveTable(el, rows, assigneeFilter) {
       '</td>' +
       '<td class="num">' + totalCount + '</td>' +
       '<td class="num">' + (Math.round(totalSP * 10) / 10) + '</td>' +
-      '<td><div class="closeout-bar" title="Done ' + pctD + '% · In Progress ' + pctI + '% · To Do ' + pctT + '%">' +
-        '<span class="seg-completed" style="width:' + pctD + '%"></span>' +
-        '<span class="seg-inprogress" style="width:' + pctI + '%"></span>' +
+      '<td><div class="closeout-bar" title="To Do ' + pctT + '% · In Progress ' + pctI + '% · Done ' + pctD + '%">' +
         '<span class="seg-todo" style="width:' + pctT + '%"></span>' +
+        '<span class="seg-inprogress" style="width:' + pctI + '%"></span>' +
+        '<span class="seg-completed" style="width:' + pctD + '%"></span>' +
       '</div>' +
       bucketPillsHTML([
-        { cls:'bp-done',   sp:c.done.sp,   n:c.done.count,   label:'Done' },
-        { cls:'bp-inprog', sp:c.inprog.sp, n:c.inprog.count, label:'In Prog' },
         { cls:'bp-todo',   sp:c.todo.sp,   n:c.todo.count,   label:'To Do' },
+        { cls:'bp-inprog', sp:c.inprog.sp, n:c.inprog.count, label:'In Prog' },
+        { cls:'bp-done',   sp:c.done.sp,   n:c.done.count,   label:'Done' },
       ]) +
       '</td>' +
       '<td class="num"><span class="closeout-pct ' + pctBand(pctD) + '">' + pctD + '%</span></td>' +
@@ -3850,13 +3879,13 @@ function renderActiveTable(el, rows, assigneeFilter) {
     var detailHidden = isOpen ? '' : ' hidden';
     html += '<tr class="closeout-detail-row' + detailHidden + '" data-parent="' + rid + '">' +
       '<td colspan="6"><div class="closeout-detail-inner">' +
-        (c.inprog.count ? '<div class="closeout-detail-section">' +
-          '<div class="closeout-detail-section-title">In Progress <span class="count">' + c.inprog.count + ' items · ' + c.inprog.sp + ' SP</span></div>' +
-          renderCloseoutTickets(c.inprog.tickets, 'inprog') +
-        '</div>' : '') +
         (c.todo.count ? '<div class="closeout-detail-section">' +
           '<div class="closeout-detail-section-title">To Do <span class="count">' + c.todo.count + ' items · ' + c.todo.sp + ' SP</span></div>' +
           renderCloseoutTickets(c.todo.tickets, 'todo') +
+        '</div>' : '') +
+        (c.inprog.count ? '<div class="closeout-detail-section">' +
+          '<div class="closeout-detail-section-title">In Progress <span class="count">' + c.inprog.count + ' items · ' + c.inprog.sp + ' SP</span></div>' +
+          renderCloseoutTickets(c.inprog.tickets, 'inprog') +
         '</div>' : '') +
         (c.done.count ? '<div class="closeout-detail-section">' +
           '<div class="closeout-detail-section-title">Done <span class="count">' + c.done.count + ' items · ' + c.done.sp + ' SP</span></div>' +
