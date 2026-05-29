@@ -586,16 +586,16 @@ tr.ticket-row:hover td{background:var(--surface2);}
 .pill.none{background:transparent;color:var(--muted);font-style:italic;border:1px solid var(--border);}
 .pill.future{background:var(--accent-bg);color:var(--accent);border:1px solid var(--accent-border);}
 .pill.future .pill-dot{background:var(--accent);}
-.pill.ts-done{background:var(--green-bg);color:var(--green);border:1px solid var(--green-border);}
-.pill.ts-done .pill-dot{background:var(--green);}
-.pill.ts-inprogress{background:var(--blue-bg,#eff6ff);color:var(--blue);border:1px solid var(--blue-border,#bfdbfe);}
-.pill.ts-inprogress .pill-dot{background:var(--blue);}
-.pill.ts-accepted{background:#f0fdf4;color:#15803d;border:1px solid #86efac;}
-.pill.ts-accepted .pill-dot{background:#15803d;}
-.pill.ts-devcomplete{background:#f5f3ff;color:#7c3aed;border:1px solid #ddd6fe;}
-.pill.ts-devcomplete .pill-dot{background:#7c3aed;}
-.pill.ts-todo{background:var(--surface2);color:var(--text2);border:1px solid var(--border);}
-.pill.ts-todo .pill-dot{background:var(--muted2);}
+/* Ticket-status pills in the sprint table — collapse every Jira status into
+   one of three category colors, matching the rest of the dashboard:
+   To Do (gray) · In Progress (blue) · Done (green). Cancelled rolls into
+   Done because the ticket is closed (Jira's own convention). */
+.pill.ts-done{background:#e3fcef;color:#006644;border:1px solid #abf5d1;}
+.pill.ts-done .pill-dot{background:#006644;}
+.pill.ts-inprogress{background:#deebff;color:#0747a6;border:1px solid #b3d4ff;}
+.pill.ts-inprogress .pill-dot{background:#0747a6;}
+.pill.ts-todo{background:#dfe1e6;color:#42526e;border:1px solid #c1c7d0;}
+.pill.ts-todo .pill-dot{background:#42526e;}
 tr.col-subhdr td{background:var(--surface2);border-bottom:1px solid var(--border2);border-top:1px solid var(--border2);padding:3px 8px;}
 tr.col-subhdr td span{font-size:9px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--muted);}
 tr.col-subhdr.hidden{display:none;}
@@ -2485,11 +2485,11 @@ function renderSHDKPI() {
       sub: Math.round(totalSP * 10) / 10 + ' SP committed · ' + scopeLabel,
       pct: pctDone },
     { label:'To Do', value: todoSP + ' SP', color: 'kpi-todo', cardClass: 'kpi-todo-card',
-      sub: todoCount + (todoCount === 1 ? ' ticket' : ' tickets'), bucket: 'todo' },
+      sub: todoCount + (todoCount === 1 ? ' item' : ' items'), bucket: 'todo' },
     { label:'In Progress', value: inprogSP + ' SP', color: 'kpi-inprog', cardClass: 'kpi-inprog-card',
-      sub: inprogCount + (inprogCount === 1 ? ' ticket' : ' tickets'), bucket: 'inprog' },
+      sub: inprogCount + (inprogCount === 1 ? ' item' : ' items'), bucket: 'inprog' },
     { label:'Done', value: doneSP + ' SP', color: 'kpi-done', cardClass: 'kpi-done-card',
-      sub: doneCount + (doneCount === 1 ? ' ticket' : ' tickets'), bucket: 'done' },
+      sub: doneCount + (doneCount === 1 ? ' item' : ' items'), bucket: 'done' },
   ];
   renderKPICards('shd-kpi', kpis);
 }
@@ -2758,22 +2758,22 @@ function renderBoardHealthGrid(containerId) {
             'data-sprint-name="' + chipSprintNameAttr + '" ' +
             'data-bucket="' + bucket + '" ' +
             'role="button" tabindex="0" ' +
-            'title="' + n + ' ticket' + (n === 1 ? '' : 's') + ' — click to view"';
+            'title="' + n + ' item' + (n === 1 ? '' : 's') + ' — click to view"';
         };
         return '<div class="bc-status-chips">' +
           '<div ' + dataAttrs('todo', chips.todoN) + '>' +
             '<div class="bc-chip-num">'   + chips.todo   + '</div>' +
-            '<div class="bc-chip-sub">' + chips.todoN + ' tix</div>' +
+            '<div class="bc-chip-sub">' + chips.todoN + (chips.todoN === 1 ? ' item' : ' items') + '</div>' +
             '<div class="bc-chip-label">To Do</div>' +
           '</div>' +
           '<div ' + dataAttrs('inprog', chips.inprogN) + '>' +
             '<div class="bc-chip-num">' + chips.inprog + '</div>' +
-            '<div class="bc-chip-sub">' + chips.inprogN + ' tix</div>' +
+            '<div class="bc-chip-sub">' + chips.inprogN + (chips.inprogN === 1 ? ' item' : ' items') + '</div>' +
             '<div class="bc-chip-label">In Prog</div>' +
           '</div>' +
           '<div ' + dataAttrs('done', chips.doneN) + '>' +
             '<div class="bc-chip-num">'   + chips.done   + '</div>' +
-            '<div class="bc-chip-sub">' + chips.doneN + ' tix</div>' +
+            '<div class="bc-chip-sub">' + chips.doneN + (chips.doneN === 1 ? ' item' : ' items') + '</div>' +
             '<div class="bc-chip-label">Done</div>' +
           '</div>' +
         '</div>';
@@ -3386,13 +3386,15 @@ function renderSHDTable() {
               '<td><span>SP</span></td>' +
               '<td colspan="3"><span>Assignee</span></td>' +
             '</tr>';
-            // Ticket rows per epic
+            // Ticket rows per epic. Map every status to one of three Jira
+            // categories: To Do (gray) / In Progress (blue) / Done (green).
+            // Cancelled rolls into Done — the work is closed either way.
             visibleTickets.forEach(function(t, ti) {
-              var sc = t.status === 'Done' ? 'ts-done'
-                     : (t.status === 'In Progress' || t.status === 'Test Complete') ? 'ts-inprogress'
-                     : (t.status === 'Accepted' || t.status === 'Acceptance') ? 'ts-accepted'
-                     : (t.status === 'Development Complete' || t.status === 'Dev Complete') ? 'ts-devcomplete'
-                     : 'ts-todo';
+              var s = String(t.status || '').toLowerCase().trim();
+              var sc;
+              if (/(^|\b)(accepted|acceptance|done|cancel(led|ed)?|won.?t.?do|closed|resolved|complete[d]?)(\b|$)/.test(s)) sc = 'ts-done';
+              else if (/(in.?progress|test.?complete|dev.?(?:elopment.?)?complete|in.?review|pending.?approval|review|blocked)/.test(s)) sc = 'ts-inprogress';
+              else sc = 'ts-todo';
               var statusLabel = t.status || 'To Do';
               var itype = (t.issueType || 'Story').toLowerCase().replace(/[^a-z]/g,'');
               var itypeClass = itype === 'story' ? 'itype-story'
