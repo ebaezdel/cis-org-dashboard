@@ -208,6 +208,11 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-s
 .kpi-card.kpi-todo-card{background:linear-gradient(180deg,#f4f5f7 0%,var(--surface) 60%);}
 .kpi-card.kpi-inprog-card{background:linear-gradient(180deg,#deebff 0%,var(--surface) 60%);}
 .kpi-card.kpi-done-card{background:linear-gradient(180deg,#e3fcef 0%,var(--surface) 60%);}
+.kpi-card.kpi-clickable{cursor:pointer;transition:transform .12s,box-shadow .12s;}
+.kpi-card.kpi-clickable:hover{transform:translateY(-1px);box-shadow:0 6px 16px rgba(15,23,42,.08);border-color:var(--accent);}
+.kpi-card.kpi-clickable:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+.kpi-open-hint{float:right;color:var(--muted2);font-size:14px;line-height:1;font-weight:600;transition:transform .15s,color .15s;}
+.kpi-card.kpi-clickable:hover .kpi-open-hint{color:var(--accent);transform:translateX(2px);}
 .kpi-sub{font-size:11px;color:var(--muted);margin-top:3px;}
 .kpi-bar{height:3px;background:var(--surface2);border-radius:2px;margin-top:8px;overflow:hidden;}
 .kpi-bar-fill{height:100%;border-radius:2px;background:var(--accent);}
@@ -320,7 +325,9 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-s
 
 /* Status chips — Jira-style Todo / In Progress / Done counts */
 .bc-status-chips{display:flex;gap:6px;margin:8px 0 4px;}
-.bc-chip{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:6px 4px;border-radius:6px;min-width:0;}
+.bc-chip{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:6px 4px;border-radius:6px;min-width:0;cursor:pointer;transition:transform .12s,filter .12s,box-shadow .12s;}
+.bc-chip:hover{transform:translateY(-1px);filter:brightness(.95);box-shadow:0 3px 8px rgba(15,23,42,.08);}
+.bc-chip:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
 .bc-chip-num{font-size:16px;font-weight:700;line-height:1;}
 .bc-chip-sub{font-size:9px;font-weight:600;color:inherit;opacity:.7;margin-top:2px;}
 .bc-chip-label{font-size:8px;font-weight:600;letter-spacing:.4px;text-transform:uppercase;margin-top:2px;}
@@ -499,6 +506,7 @@ tr.closeout-detail-row.hidden{display:none;}
 .co-epic-empty{font-size:11px;color:var(--muted2);}
 .co-row .atr-status{justify-self:end;}
 .co-row .atr-sp{justify-self:end;}
+.bucket-modal-sprint-tag{display:inline-block;margin-left:8px;padding:1px 6px;font-family:'SFMono-Regular',Consolas,Menlo,monospace;font-size:9px;font-weight:600;background:var(--surface2);color:var(--muted);border-radius:3px;letter-spacing:-.1px;}
 
 /* Charts row */
 .charts-row{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px;}
@@ -2477,11 +2485,11 @@ function renderSHDKPI() {
       sub: Math.round(totalSP * 10) / 10 + ' SP committed · ' + scopeLabel,
       pct: pctDone },
     { label:'To Do', value: todoSP + ' SP', color: 'kpi-todo', cardClass: 'kpi-todo-card',
-      sub: todoCount + (todoCount === 1 ? ' ticket' : ' tickets') },
+      sub: todoCount + (todoCount === 1 ? ' ticket' : ' tickets'), bucket: 'todo' },
     { label:'In Progress', value: inprogSP + ' SP', color: 'kpi-inprog', cardClass: 'kpi-inprog-card',
-      sub: inprogCount + (inprogCount === 1 ? ' ticket' : ' tickets') },
+      sub: inprogCount + (inprogCount === 1 ? ' ticket' : ' tickets'), bucket: 'inprog' },
     { label:'Done', value: doneSP + ' SP', color: 'kpi-done', cardClass: 'kpi-done-card',
-      sub: doneCount + (doneCount === 1 ? ' ticket' : ' tickets') },
+      sub: doneCount + (doneCount === 1 ? ' ticket' : ' tickets'), bucket: 'done' },
   ];
   renderKPICards('shd-kpi', kpis);
 }
@@ -2493,8 +2501,13 @@ function renderKPICards(containerId, kpis) {
     var labelHtml = k.tip
       ? '<span class="tooltip-wrap">' + k.label + '<span style="margin-left:4px;font-size:9px;color:var(--muted);cursor:help;">ⓘ</span><span class="tip">' + k.tip + '</span></span>'
       : k.label;
-    return '<div class="kpi-card' + (k.cardClass ? ' ' + k.cardClass : '') + '">' +
-      '<div class="kpi-label">' + labelHtml + '</div>' +
+    var clickAttrs = k.bucket
+      ? ' class="kpi-card kpi-clickable' + (k.cardClass ? ' ' + k.cardClass : '') + '"' +
+        ' role="button" tabindex="0" data-bucket="' + escapeHtml(k.bucket) + '"' +
+        ' aria-label="' + escapeHtml(k.label) + ' — open ticket list"'
+      : ' class="kpi-card' + (k.cardClass ? ' ' + k.cardClass : '') + '"';
+    return '<div' + clickAttrs + '>' +
+      '<div class="kpi-label">' + labelHtml + (k.bucket ? '<span class="kpi-open-hint">›</span>' : '') + '</div>' +
       '<div class="kpi-value' + (k.color ? ' ' + k.color : '') + '">' + k.value + '</div>' +
       '<div class="kpi-sub">' + k.sub + '</div>' +
       (k.pct != null ? '<div class="kpi-bar"><div class="kpi-bar-fill" style="width:' + Math.min(k.pct, 100) + '%"></div></div>' : '') +
@@ -2736,23 +2749,35 @@ function renderBoardHealthGrid(containerId) {
     // Status chips (Jira-style Todo / In Progress / Done — work-item counts)
     var chips = bucketStatusFromRows(sourceRows);
     var chipsHTML = isNone ? '' :
-      '<div class="bc-status-chips">' +
-        '<div class="bc-chip bc-chip-todo" title="' + chips.todoN + ' ticket' + (chips.todoN === 1 ? '' : 's') + '">' +
-          '<div class="bc-chip-num">'   + chips.todo   + '</div>' +
-          '<div class="bc-chip-sub">' + chips.todoN + (chips.todoN === 1 ? ' tix' : ' tix') + '</div>' +
-          '<div class="bc-chip-label">To Do</div>' +
-        '</div>' +
-        '<div class="bc-chip bc-chip-inprog" title="' + chips.inprogN + ' ticket' + (chips.inprogN === 1 ? '' : 's') + '">' +
-          '<div class="bc-chip-num">' + chips.inprog + '</div>' +
-          '<div class="bc-chip-sub">' + chips.inprogN + ' tix</div>' +
-          '<div class="bc-chip-label">In Prog</div>' +
-        '</div>' +
-        '<div class="bc-chip bc-chip-done" title="' + chips.doneN + ' ticket' + (chips.doneN === 1 ? '' : 's') + '">' +
-          '<div class="bc-chip-num">'   + chips.done   + '</div>' +
-          '<div class="bc-chip-sub">' + chips.doneN + ' tix</div>' +
-          '<div class="bc-chip-label">Done</div>' +
-        '</div>' +
-      '</div>';
+      (function(){
+        var chipBoardAttr      = escapeHtml(d.board);
+        var chipSprintNameAttr = escapeHtml(d._multiSprint ? '' : (d.sprintName || ''));
+        var dataAttrs = function(bucket, n){
+          return 'class="bc-chip bc-chip-' + bucket + ' js-bucket-trigger" ' +
+            'data-board="' + chipBoardAttr + '" ' +
+            'data-sprint-name="' + chipSprintNameAttr + '" ' +
+            'data-bucket="' + bucket + '" ' +
+            'role="button" tabindex="0" ' +
+            'title="' + n + ' ticket' + (n === 1 ? '' : 's') + ' — click to view"';
+        };
+        return '<div class="bc-status-chips">' +
+          '<div ' + dataAttrs('todo', chips.todoN) + '>' +
+            '<div class="bc-chip-num">'   + chips.todo   + '</div>' +
+            '<div class="bc-chip-sub">' + chips.todoN + ' tix</div>' +
+            '<div class="bc-chip-label">To Do</div>' +
+          '</div>' +
+          '<div ' + dataAttrs('inprog', chips.inprogN) + '>' +
+            '<div class="bc-chip-num">' + chips.inprog + '</div>' +
+            '<div class="bc-chip-sub">' + chips.inprogN + ' tix</div>' +
+            '<div class="bc-chip-label">In Prog</div>' +
+          '</div>' +
+          '<div ' + dataAttrs('done', chips.doneN) + '>' +
+            '<div class="bc-chip-num">'   + chips.done   + '</div>' +
+            '<div class="bc-chip-sub">' + chips.doneN + ' tix</div>' +
+            '<div class="bc-chip-label">Done</div>' +
+          '</div>' +
+        '</div>';
+      })();
 
     // Footer: clickable avatars + ⋯ workload modal + Velocity
     var workload = isNone ? [] : aggregateWorkload(sourceRows);
@@ -2780,8 +2805,9 @@ function renderBoardHealthGrid(containerId) {
     '</div>';
 
     var hasGoal = !isNone && d.sprintGoal && d.sprintGoal !== '—' && !d._multiSprint;
+    var workItems = !isNone && typeof d.issues === 'number' ? d.issues : 0;
     var datesStr = (!isNone && d.startDate && !d._multiSprint)
-      ? d.startDate + ' → ' + (d.endDate || '?')
+      ? d.startDate + ' → ' + (d.endDate || '?') + (workItems > 0 ? ' (' + workItems + ' work item' + (workItems === 1 ? '' : 's') + ')' : '')
       : '';
 
     return '<div class="board-card health-' + hc + '">' +
@@ -3985,9 +4011,11 @@ function closeWorkloadModal(e) {
   if (modal) modal.classList.remove('open');
 }
 document.addEventListener('keydown', function(e){
-  if (e.key === 'Escape') { closeWorkloadModal(); closeAssigneeModal(); }
+  if (e.key === 'Escape') { closeWorkloadModal(); closeAssigneeModal(); closeBucketModal(); }
 });
-// Delegated click handler for the ⋯ workload trigger and avatar buttons.
+// Delegated click handler for the ⋯ workload trigger, avatar buttons,
+// status chips, and KPI cards. A single listener avoids re-binding after
+// every renderSHD() call.
 document.addEventListener('click', function(e){
   var trg = e.target && e.target.closest;
   if (!trg) return;
@@ -4000,6 +4028,36 @@ document.addEventListener('click', function(e){
       avatarBtn.getAttribute('data-sprint-name'),
       avatarBtn.getAttribute('data-dev')
     );
+    return;
+  }
+  // Board card chip — sprint-scoped bucket modal
+  var chip = e.target.closest('.js-bucket-trigger');
+  if (chip) {
+    e.preventDefault();
+    openBucketModal({
+      scope: 'sprint',
+      bucket: chip.getAttribute('data-bucket'),
+      board: chip.getAttribute('data-board'),
+      sprintName: chip.getAttribute('data-sprint-name'),
+    });
+    return;
+  }
+  // KPI card — global bucket modal across the current filter scope
+  var kpi = e.target.closest('.kpi-clickable');
+  if (kpi && kpi.getAttribute('data-bucket')) {
+    openBucketModal({ scope: 'global', bucket: kpi.getAttribute('data-bucket') });
+    return;
+  }
+});
+
+// Keyboard support: Enter/Space on focused chips and KPI cards
+document.addEventListener('keydown', function(e){
+  if (e.key !== 'Enter' && e.key !== ' ') return;
+  var t = document.activeElement;
+  if (!t) return;
+  if (t.classList && (t.classList.contains('js-bucket-trigger') || t.classList.contains('kpi-clickable'))) {
+    e.preventDefault();
+    t.click();
   }
 });
 
@@ -4158,6 +4216,146 @@ function openAssigneeModal(board, sprintName, dev) {
 function closeAssigneeModal(e) {
   if (e && e.target && e.target.id !== 'assignee-tickets-modal' && !e.target.classList.contains('modal-close')) return;
   var modal = document.getElementById('assignee-tickets-modal');
+  if (modal) modal.classList.remove('open');
+}
+
+// ─── Status-bucket modal (To Do / In Progress / Done ticket list) ──────────
+
+var BUCKET_LABELS = { todo: 'To Do', inprog: 'In Progress', done: 'Done' };
+
+// Walk a list of sprint rows and pull every ticket whose status maps to
+// `bucket`. Returns flat array of {…ticket, sprintName, board, epicLabel}.
+function ticketsForBucket(rows, bucket, assigneeFilter) {
+  var IN_PROG_RE = /(in.?progress|test.?complete|dev.?(?:elopment.?)?complete|in.?review|pending.?approval|review|blocked)/i;
+  var DONE_RE    = /^(accepted|done|complete[d]?|resolved|closed|cancelled|canceled|won.?t.?do)$/i;
+  var classifyOne = function(status){
+    if (DONE_RE.test(status))    return 'done';
+    if (IN_PROG_RE.test(status)) return 'inprog';
+    return 'todo';
+  };
+  var out = [];
+  (rows || []).forEach(function(d){
+    (d.epicBreakdown || []).forEach(function(epic){
+      (epic.tickets || []).forEach(function(t){
+        if (classifyOne(t.status || '') !== bucket) return;
+        if (assigneeFilter && (t.assignee || 'Unassigned') !== assigneeFilter) return;
+        out.push(Object.assign({}, t, {
+          sprintName: d.sprintName,
+          board:      d.board,
+          epicLabel:  epic.label || t.epicLabel || '',
+        }));
+      });
+    });
+  });
+  // Sort by SP desc; null SP last
+  out.sort(function(a, b){
+    var sa = (typeof a.sp === 'number') ? a.sp : -1;
+    var sb = (typeof b.sp === 'number') ? b.sp : -1;
+    return sb - sa;
+  });
+  return out;
+}
+
+// Open the modal in either of two scopes:
+//   {scope:'global', bucket:'todo'|'inprog'|'done'} — KPI card click,
+//     pulls from FILTERED (or active sprints if no filter)
+//   {scope:'sprint', bucket, board, sprintName} — board chip click,
+//     pulls from one specific sprint row.
+function openBucketModal(opts) {
+  var modal = document.getElementById('bucket-tickets-modal');
+  if (!modal) return;
+  var bucket = opts.bucket;
+  if (!BUCKET_LABELS[bucket]) return;
+  var assigneeF = (document.getElementById('f-assignee') || {}).value || '';
+  var rows;
+  var scopeLabel;
+  if (opts.scope === 'sprint') {
+    rows = (window.ALL_SPRINTS_FY26 || []).filter(function(d){
+      return d.board === opts.board && d.sprintName === opts.sprintName;
+    });
+    scopeLabel = (opts.board || '') + ' · ' + (opts.sprintName || '');
+  } else {
+    // Global: same source the SHD KPI strip uses
+    var sprintF = document.getElementById('f-sprint') ? document.getElementById('f-sprint').value : '';
+    var qF      = document.getElementById('f-q')      ? document.getElementById('f-q').value      : '';
+    var statusF = document.getElementById('f-status') ? document.getElementById('f-status').value  : '';
+    var hasHistoricFilter = sprintF || qF || statusF !== 'active';
+    rows = hasHistoricFilter ? FILTERED : FILTERED.filter(function(d){ return d.sprintStatus === 'active'; });
+    if (!rows.length) rows = (window.ACTIVE_SPRINTS || []).filter(function(d){ return d.sprintStatus === 'active'; });
+    var em = (document.getElementById('f-em') || {}).value || '';
+    var bd = (document.getElementById('f-board') || {}).value || '';
+    var bits = [];
+    if (statusF) bits.push(statusF);
+    if (qF)      bits.push(qF);
+    if (sprintF) bits.push('S' + sprintF);
+    if (em)      bits.push(em);
+    if (bd)      bits.push(bd);
+    scopeLabel = bits.length ? bits.join(' · ') : 'All active sprints';
+  }
+  var tickets = ticketsForBucket(rows, bucket, assigneeF);
+  // Header: bucket-colored pill + label, count + SP roll-up below
+  var totalSP = tickets.reduce(function(s, t){ return s + ((typeof t.sp === 'number') ? t.sp : 0); }, 0);
+  var headerColor = bucket === 'done'  ? '#006644' :
+                    bucket === 'inprog' ? '#0747a6' :
+                                          '#42526e';
+  document.getElementById('bucket-modal-title').innerHTML =
+    '<span class="atr-status ats-' + bucket + '" style="font-size:11px;padding:3px 9px;">' + BUCKET_LABELS[bucket] + '</span>' +
+    '<span style="margin-left:10px;color:' + headerColor + ';">' + tickets.length + ' work item' + (tickets.length === 1 ? '' : 's') + '</span>' +
+    '<span style="margin-left:10px;color:var(--muted);font-weight:500;font-size:13px;">· ' + (Math.round(totalSP * 10) / 10) + ' SP</span>';
+  var subtitleParts = [scopeLabel];
+  if (assigneeF) subtitleParts.push('👤 ' + assigneeF);
+  document.getElementById('bucket-modal-subtitle').textContent = subtitleParts.join(' · ');
+  // Render tickets in the Jira-style row format. Re-use the closeout
+  // ticket renderer (it already supports avatar, type icon, key, title,
+  // epic, status pill, SP) and pass the bucket name for tinted backgrounds.
+  var rowsHTML;
+  if (!tickets.length) {
+    rowsHTML = '<div class="assignee-tickets-empty">No tickets in this bucket.</div>';
+  } else {
+    // Annotate each ticket with sprint+board info shown inline as a small
+    // mono prefix when the modal is global (so the user knows which sprint
+    // each ticket came from).
+    var showSprint = opts.scope !== 'sprint';
+    var bucketColorClass = bucket === 'done' ? 'completed' : bucket === 'inprog' ? 'inprog' : 'todo';
+    rowsHTML = '<div class="closeout-tickets">' + tickets.map(function(t){
+      // Inline mini sprint label appended to the title when global scope
+      var titleExtra = showSprint
+        ? '<span class="bucket-modal-sprint-tag" title="' + escapeHtml(t.board + ' · ' + t.sprintName) + '">' + escapeHtml(t.sprintName || '') + '</span>'
+        : '';
+      var statusClass = statusBadgeClass(t.status);
+      var iconCls     = ticketIconClass(t.issueType);
+      var iconHTML    = ticketIconHTML(t.issueType);
+      var keyClass    = 'atr-key' + (/cancel/i.test(t.status) ? ' cancelled' : '');
+      var spStr       = t.sp == null ? '–' : t.sp;
+      var browseUrl   = 'https://moveinc.atlassian.net/browse/' + encodeURIComponent(t.key);
+      var assignee    = t.assignee || 'Unassigned';
+      var avatarUrl   = t.avatarUrl || lookupAvatarUrl(t.assignee);
+      var epicLabel   = t.epicLabel || '';
+      var epicKey     = t.epicKey   || '';
+      var epicCell    = epicLabel
+        ? '<span class="co-epic" title="' + escapeHtml(epicLabel) + (epicKey ? ' (' + epicKey + ')' : '') + '">' +
+            (epicKey ? '<span class="co-epic-key">' + escapeHtml(epicKey) + '</span>' : '') +
+            '<span class="co-epic-label">' + escapeHtml(epicLabel) + '</span>' +
+          '</span>'
+        : '<span class="co-epic-empty">—</span>';
+      return '<a class="assignee-ticket-row co-row co-bucket-' + bucketColorClass + '" href="' + browseUrl + '" target="_blank" rel="noopener">' +
+        '<span class="co-avatar-wrap" title="' + escapeHtml(assignee) + '">' + initialsAvatar(assignee, avatarUrl) + '</span>' +
+        '<span class="atr-icon ' + iconCls + '" title="' + escapeHtml(t.issueType || '') + '">' + iconHTML + '</span>' +
+        '<span class="' + keyClass + '">' + escapeHtml(t.key) + '</span>' +
+        '<span class="atr-title" title="' + escapeHtml(t.title || '') + '">' + escapeHtml(t.title || '') + titleExtra + '</span>' +
+        epicCell +
+        '<span class="atr-status ' + statusClass + '">' + escapeHtml(t.status || '—') + '</span>' +
+        '<span class="atr-sp" title="Story points">' + spStr + '</span>' +
+      '</a>';
+    }).join('') + '</div>';
+  }
+  document.getElementById('bucket-modal-body').innerHTML = rowsHTML;
+  modal.classList.add('open');
+}
+
+function closeBucketModal(e) {
+  if (e && e.target && e.target.id !== 'bucket-tickets-modal' && !e.target.classList.contains('modal-close')) return;
+  var modal = document.getElementById('bucket-tickets-modal');
   if (modal) modal.classList.remove('open');
 }
 
@@ -4785,6 +4983,18 @@ window.addEventListener('resize', function() { placeFilterBank(); }, { passive: 
     </div>
     <div class="modal-subtitle" id="assignee-modal-sprint"></div>
     <div class="modal-body" id="assignee-modal-body"></div>
+  </div>
+</div>
+
+<!-- Status bucket modal — opens when a KPI card or a board card chip is clicked -->
+<div class="modal-overlay" id="bucket-tickets-modal" onclick="closeBucketModal(event)">
+  <div class="modal-card" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h3 id="bucket-modal-title">Tickets</h3>
+      <button class="modal-close" onclick="closeBucketModal(event)" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-subtitle" id="bucket-modal-subtitle"></div>
+    <div class="modal-body" id="bucket-modal-body"></div>
   </div>
 </div>
 
