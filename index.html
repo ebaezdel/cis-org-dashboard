@@ -497,8 +497,8 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-s
 .closeout-bucket-pill.bp-carryover{background:#fef3c7;color:#92400e;}
 .closeout-bucket-pill.bp-cancelled{background:#f1f5f9;color:#64748b;}
 .closeout-bucket-pill.bp-empty{opacity:.45;}
-.closeout-assignee-badge{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;background:rgba(59,130,246,.1);color:var(--accent);border-radius:12px;font-size:11px;font-weight:600;margin-right:6px;}
-.closeout-assignee-badge::before{content:'👤';font-size:11px;}
+.closeout-assignee-badge{display:inline-flex;align-items:center;gap:6px;padding:3px 10px 3px 4px;background:rgba(59,130,246,.1);color:var(--accent);border-radius:14px;font-size:11px;font-weight:600;margin-right:6px;}
+.closeout-assignee-badge .bc-avatar{width:20px;height:20px;font-size:8px;}
 .co-bucket-inprog{background:#eff6ff;border-color:#dbeafe;}
 .co-bucket-inprog:hover{background:#dbeafe;}
 .co-bucket-todo{background:#f8fafc;border-color:#e2e8f0;}
@@ -3745,7 +3745,7 @@ function renderClosedTable(el, rows, assigneeFilter) {
   var totSP = tot.completedSP + tot.carryoverSP + tot.cancelledSP;
   var avgCompletion = totSP > 0 ? Math.round(tot.completedSP / totSP * 100) : 0;
   var carryoverPct  = totSP > 0 ? Math.round(tot.carryoverSP / totSP * 100) : 0;
-  var assigneeBadge = assigneeFilter ? '<span class="closeout-assignee-badge">' + escapeHtml(assigneeFilter) + '</span>' : '';
+  var assigneeBadge = assigneeFilter ? '<span class="closeout-assignee-badge">' + initialsAvatar(assigneeFilter, lookupAvatarUrl(assigneeFilter)) + escapeHtml(assigneeFilter) + '</span>' : '';
 
   var html = '<div class="closeout-wrap">' +
     '<div class="closeout-summary">' +
@@ -3843,7 +3843,7 @@ function renderActiveTable(el, rows, assigneeFilter) {
   });
   var totSP = tot.doneSP + tot.inprogSP + tot.todoSP;
   var pctDone = totSP > 0 ? Math.round(tot.doneSP / totSP * 100) : 0;
-  var assigneeBadge = assigneeFilter ? '<span class="closeout-assignee-badge">' + escapeHtml(assigneeFilter) + '</span>' : '';
+  var assigneeBadge = assigneeFilter ? '<span class="closeout-assignee-badge">' + initialsAvatar(assigneeFilter, lookupAvatarUrl(assigneeFilter)) + escapeHtml(assigneeFilter) + '</span>' : '';
 
   var html = '<div class="closeout-wrap">' +
     '<div class="closeout-summary">' +
@@ -4432,9 +4432,7 @@ function openBucketModal(opts) {
     '<span class="atr-status ats-' + bucket + '" style="font-size:11px;padding:3px 9px;">' + BUCKET_LABELS[bucket] + '</span>' +
     '<span style="margin-left:10px;color:' + headerColor + ';">' + tickets.length + ' work item' + (tickets.length === 1 ? '' : 's') + '</span>' +
     '<span style="margin-left:10px;color:var(--muted);font-weight:500;font-size:13px;">· ' + (Math.round(totalSP * 10) / 10) + ' SP</span>';
-  var subtitleParts = [scopeLabel];
-  if (assigneeF) subtitleParts.push('👤 ' + assigneeF);
-  document.getElementById('bucket-modal-subtitle').textContent = subtitleParts.join(' · ');
+  document.getElementById('bucket-modal-subtitle').textContent = scopeLabel;
   // Render tickets in the Jira-style row format. Re-use the closeout
   // ticket renderer (it already supports avatar, type icon, key, title,
   // epic, status pill, SP) and pass the bucket name for tinted backgrounds.
