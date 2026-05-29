@@ -292,6 +292,25 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-s
 .sb-cxl{background:#475569;}
 .sb-unk{background:#64748b;}
 
+/* Assignee searchable combobox */
+.assignee-combo{position:relative;display:flex;align-items:center;gap:0;}
+.assignee-combo-input{width:170px;padding:6px 26px 6px 10px;font-size:12px;font-family:inherit;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);}
+.assignee-combo-input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 2px rgba(59,130,246,.2);}
+.assignee-combo-clear{position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--muted2);font-size:14px;line-height:1;cursor:pointer;padding:2px 6px;border-radius:3px;display:none;font-family:inherit;}
+.assignee-combo-clear:hover{background:var(--surface2);color:var(--text);}
+.assignee-combo.has-value .assignee-combo-clear{display:block;}
+.assignee-combo-panel{display:none;position:absolute;top:calc(100% + 4px);left:0;width:240px;background:var(--surface);border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 24px rgba(15,23,42,.12);z-index:100;max-height:300px;overflow:hidden;flex-direction:column;}
+.assignee-combo.open .assignee-combo-panel{display:flex;}
+.assignee-combo-toggle{padding:8px 12px;border-bottom:1px solid var(--border);background:var(--surface2);font-size:11px;color:var(--muted);}
+.assignee-combo-toggle label{display:flex;align-items:center;gap:6px;cursor:pointer;}
+.assignee-combo-toggle input{margin:0;cursor:pointer;}
+.assignee-combo-options{overflow-y:auto;flex:1;padding:4px 0;}
+.assignee-combo-option{padding:7px 12px;font-size:12px;color:var(--text);cursor:pointer;display:flex;align-items:center;gap:8px;}
+.assignee-combo-option:hover,.assignee-combo-option.active{background:var(--surface2);}
+.assignee-combo-option.selected{background:rgba(59,130,246,.08);color:var(--accent);font-weight:600;}
+.assignee-combo-option .bc-avatar{width:20px;height:20px;border-width:1px;font-size:8px;margin:0;}
+.assignee-combo-empty{padding:12px;text-align:center;color:var(--muted);font-size:11px;}
+
 /* Status chips — Jira-style Todo / In Progress / Done counts */
 .bc-status-chips{display:flex;gap:6px;margin:8px 0 4px;}
 .bc-chip{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:6px 4px;border-radius:6px;min-width:0;}
@@ -333,21 +352,23 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-s
 /* Workload-by-assignee modal */
 .modal-overlay{display:none;position:fixed;inset:0;z-index:200;background:rgba(15,23,42,.5);align-items:center;justify-content:center;padding:20px;}
 .modal-overlay.open{display:flex;}
-.modal-card{background:var(--surface);border-radius:10px;box-shadow:0 10px 32px rgba(0,0,0,.2);width:100%;max-width:560px;max-height:calc(100vh - 60px);overflow:hidden;display:flex;flex-direction:column;}
-.modal-header{display:flex;align-items:center;justify-content:space-between;padding:18px 22px 4px;flex-shrink:0;}
-.modal-header h3{font-size:15px;font-weight:600;color:var(--text);margin:0;display:flex;align-items:center;}
-.modal-close{background:none;border:none;font-size:18px;line-height:1;cursor:pointer;color:var(--muted);padding:2px 8px;border-radius:4px;font-family:inherit;}
+.modal-card{background:var(--surface);border-radius:12px;box-shadow:0 16px 40px rgba(15,23,42,.18);width:100%;max-width:600px;max-height:calc(100vh - 80px);display:flex;flex-direction:column;overflow:hidden;}
+.modal-header{display:flex;align-items:center;justify-content:space-between;padding:20px 24px 6px;flex-shrink:0;}
+.modal-header h3{font-size:16px;font-weight:600;color:var(--text);margin:0;display:flex;align-items:center;}
+.modal-close{background:none;border:none;font-size:20px;line-height:1;cursor:pointer;color:var(--muted);padding:4px 10px;border-radius:6px;font-family:inherit;}
 .modal-close:hover{background:var(--surface2);color:var(--text);}
-.modal-subtitle{font-size:11px;color:var(--muted);font-family:'SFMono-Regular',Consolas,Menlo,monospace;letter-spacing:-.1px;padding:0 22px 12px;flex-shrink:0;}
-.modal-body{padding:0 22px 18px;overflow-y:auto;}
-.workload-table{width:100%;border-collapse:collapse;font-size:12px;}
-.workload-table th{text-align:left;font-weight:600;color:var(--muted);padding:7px 8px;border-bottom:1px solid var(--border);font-size:10px;text-transform:uppercase;letter-spacing:.3px;}
-.workload-table th.num,.workload-table td.num{text-align:right;}
-.workload-table td{padding:7px 8px;border-bottom:1px solid var(--border);color:var(--text);}
+.modal-subtitle{font-size:11px;color:var(--muted);font-family:'SFMono-Regular',Consolas,Menlo,monospace;letter-spacing:-.1px;padding:0 24px 14px;flex-shrink:0;}
+.modal-body{padding:0 24px 20px;overflow-y:auto;flex:1;min-height:0;}
+.workload-table{width:100%;border-collapse:collapse;font-size:13px;table-layout:auto;}
+.workload-table th{text-align:left;font-weight:600;color:var(--muted);padding:9px 10px;border-bottom:1px solid var(--border);font-size:10px;text-transform:uppercase;letter-spacing:.4px;background:var(--surface);position:sticky;top:0;z-index:1;}
+.workload-table th.num,.workload-table td.num{text-align:right;white-space:nowrap;}
+.workload-table td{padding:10px;border-bottom:1px solid var(--border);color:var(--text);}
 .workload-table tr:last-child td{border-bottom:none;}
+.workload-table tbody tr:hover td{background:var(--surface2);}
 .workload-table tr.workload-total td{font-weight:700;background:var(--surface2);border-top:2px solid var(--border);border-bottom:none;}
-.workload-table .workload-name-cell{display:flex;align-items:center;gap:8px;}
-.workload-table .workload-sp{display:inline-block;padding:2px 7px;border-radius:10px;background:var(--surface2);font-weight:600;min-width:22px;text-align:center;font-size:11px;}
+.workload-table tr.workload-total:hover td{background:var(--surface2);}
+.workload-table .workload-name-cell{display:flex;align-items:center;gap:9px;}
+.workload-table .workload-sp{display:inline-block;padding:2px 9px;border-radius:11px;background:var(--surface2);font-weight:600;min-width:26px;text-align:center;font-size:12px;}
 
 /* Per-assignee tickets modal — Jira-style ticket list */
 .assignee-tickets-list{display:flex;flex-direction:column;gap:1px;}
@@ -378,9 +399,24 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-s
 .assignee-tickets-empty{padding:24px;text-align:center;color:var(--muted);font-size:12px;}
 .assignee-tickets-summary{display:flex;align-items:center;gap:10px;padding:0 0 12px;color:var(--muted);font-size:11px;}
 .assignee-tickets-summary strong{color:var(--text);font-weight:700;}
+.assignee-capacity{padding:14px 16px;background:var(--surface2);border-radius:8px;margin-bottom:14px;}
+.assignee-capacity-row{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:6px;}
+.assignee-capacity-fraction{font-size:13px;color:var(--text);font-weight:600;}
+.assignee-capacity-fraction strong{font-size:18px;font-weight:700;letter-spacing:-.3px;}
+.assignee-capacity-pct{font-size:11px;font-weight:700;letter-spacing:.3px;}
+.assignee-capacity-pct.green{color:#16a34a;}
+.assignee-capacity-pct.yellow{color:#d97706;}
+.assignee-capacity-pct.red{color:#dc2626;}
+.assignee-capacity-bar{height:6px;background:var(--surface);border-radius:3px;overflow:hidden;border:1px solid var(--border);}
+.assignee-capacity-bar-fill{height:100%;border-radius:3px;transition:width .4s;}
+.assignee-capacity-bar-fill.green{background:#16a34a;}
+.assignee-capacity-bar-fill.yellow{background:#d97706;}
+.assignee-capacity-bar-fill.red{background:#dc2626;}
+.assignee-capacity-meta{font-size:10px;color:var(--muted);margin-top:6px;display:flex;justify-content:space-between;}
 
 /* Charts row */
 .charts-row{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px;}
+.charts-row-single{grid-template-columns:1fr;}
 @media(max-width:800px){.charts-row{grid-template-columns:1fr;}}
 .chart-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;overflow:hidden;}
 .chart-card h3{font-size:13px;font-weight:600;color:var(--text);margin-bottom:14px;display:flex;align-items:center;gap:8px;}
@@ -700,7 +736,20 @@ tr.ticket-col-hdr.hidden{display:none;}
   </div>
   <div class="filter-group">
     <label>Assignee</label>
-    <select id="f-assignee" onchange="onAssigneeChange()"></select>
+    <div class="assignee-combo" id="assignee-combo">
+      <input type="text" id="assignee-combo-input" class="assignee-combo-input"
+             placeholder="All Assignees" autocomplete="off"
+             onfocus="openAssigneeCombo()" oninput="onAssigneeComboInput()" onkeydown="onAssigneeComboKey(event)" />
+      <button type="button" class="assignee-combo-clear" id="assignee-combo-clear" onclick="clearAssigneeFilter()" title="Clear" aria-label="Clear">&times;</button>
+      <div class="assignee-combo-panel" id="assignee-combo-panel" role="listbox">
+        <div class="assignee-combo-toggle">
+          <label><input type="checkbox" id="assignee-combo-org-only" checked onchange="refreshAssigneeFilter(getFilterState())">
+            Tyler’s org only</label>
+        </div>
+        <div class="assignee-combo-options" id="assignee-combo-options"></div>
+      </div>
+      <select id="f-assignee" onchange="onAssigneeChange()" style="display:none;"></select>
+    </div>
   </div>
   <div class="filter-group" id="filter-clear-group" style="border-right:none;">
     <button class="btn-clear-filters" id="btn-clear-filters" onclick="clearAllFilters()" title="Reset all filters">&#10005; Clear all filters</button>
@@ -731,22 +780,10 @@ tr.ticket-col-hdr.hidden{display:none;}
   <div id="shd-kpi" class="kpi-strip"></div>
   <div class="section-heading" id="board-health-heading">Board Health &mdash; Active Sprint</div>
   <div class="board-grid" id="board-health-grid"></div>
-  <div class="charts-row">
+  <div class="charts-row charts-row-single">
     <div class="chart-card">
       <h3>Issues by Status <span class="sub">To Do · In Progress · Done per board</span></h3>
       <div class="chart-wrap"><canvas id="chart-burndown"></canvas></div>
-    </div>
-    <div class="chart-card">
-      <h3>SP by Epic <span class="sub">Story points distribution per Epic/Parent</span></h3>
-      <div class="chart-wrap" id="chart-epic-wrap"><canvas id="chart-velocity"></canvas></div>
-    </div>
-    <div class="chart-card">
-      <h3>Intake Requests <span class="sub">Why was this work requested?</span></h3>
-      <div class="chart-wrap" id="chart-effort-wrap"><canvas id="chart-effort"></canvas></div>
-    </div>
-    <div class="chart-card">
-      <h3>Capacity by Assignee <span class="sub">SP consumed vs 10 SP cap</span></h3>
-      <div id="capacity-cards"></div>
     </div>
   </div>
   <div class="section-heading">Sprint Data Table</div>
@@ -1986,24 +2023,142 @@ function refreshBoardFilter(state) {
   if (prev && !valid[prev]) sel.value = '';
 }
 
+// Tyler's reports — the EMs that own the boards we care about. Any assignee
+// that ever had a ticket in a board owned by one of these EMs counts as
+// "in Tyler's org" for filter purposes.
+var TYLERS_ORG_EMS = ['Saloni', 'Maria', 'Marissa', 'Yan'];
+
+function isInTylersOrg(devName) {
+  if (!devName || devName === 'Unassigned') return false;
+  if (!Array.isArray(window.ALL_SPRINTS_FY26)) return false;
+  for (var i = 0; i < window.ALL_SPRINTS_FY26.length; i++) {
+    var d = window.ALL_SPRINTS_FY26[i];
+    if (TYLERS_ORG_EMS.indexOf(d.em) === -1) continue;
+    var tpd = d.ticketsPerDev || [];
+    for (var j = 0; j < tpd.length; j++) {
+      if (tpd[j].dev === devName) return true;
+    }
+  }
+  return false;
+}
+
 function refreshAssigneeFilter(state) {
   var sel = document.getElementById('f-assignee');
   if (!sel) return;
-  var rows = matchExcept(state, ['assignee']);
+  var rows = matchExcept(state || getFilterState(), ['assignee']);
   var valid = {};
   rows.forEach(function(d) {
     (d.ticketsPerDev || []).forEach(function(t) { valid[t.dev] = true; });
   });
   var prev = sel.value;
   sel.innerHTML = '<option value="">All Assignees</option>';
-  Object.keys(valid).sort().forEach(function(name) {
+  // Apply Tyler's-org filter when the toggle is on
+  var orgOnlyEl = document.getElementById('assignee-combo-org-only');
+  var orgOnly   = orgOnlyEl ? orgOnlyEl.checked : true;
+  var names     = Object.keys(valid).sort();
+  if (orgOnly) names = names.filter(isInTylersOrg);
+  names.forEach(function(name) {
     var o = document.createElement('option');
     o.value = o.textContent = name;
     if (name === prev) o.selected = true;
     sel.appendChild(o);
   });
   if (prev && !valid[prev]) sel.value = '';
+  // Sync custom combobox UI with the new value list
+  updateAssigneeCombo(names, sel.value);
 }
+
+// ─── Searchable assignee combobox ───────────────────────────────────────────
+
+var ASSIGNEE_COMBO_NAMES = [];
+
+function updateAssigneeCombo(names, selectedName) {
+  ASSIGNEE_COMBO_NAMES = names || [];
+  var input = document.getElementById('assignee-combo-input');
+  var combo = document.getElementById('assignee-combo');
+  if (!input || !combo) return;
+  input.value = selectedName || '';
+  combo.classList.toggle('has-value', !!selectedName);
+  renderAssigneeComboOptions(input.value);
+}
+
+function renderAssigneeComboOptions(query) {
+  var panel = document.getElementById('assignee-combo-options');
+  if (!panel) return;
+  var sel = document.getElementById('f-assignee');
+  var selectedName = sel ? sel.value : '';
+  var q = String(query || '').trim().toLowerCase();
+  // Build matching list (selected name always shown if present)
+  var matches = ASSIGNEE_COMBO_NAMES.filter(function(n){
+    return !q || n.toLowerCase().indexOf(q) !== -1;
+  });
+  // "All Assignees" option always at the top
+  var html = '<div class="assignee-combo-option' + (!selectedName ? ' selected' : '') +
+    '" data-value="" tabindex="0">All Assignees</div>';
+  if (!matches.length) {
+    html += '<div class="assignee-combo-empty">No assignees match "' + escapeHtml(query) + '"</div>';
+  } else {
+    html += matches.map(function(name){
+      var sel = name === selectedName ? ' selected' : '';
+      return '<div class="assignee-combo-option' + sel + '" data-value="' + escapeHtml(name) + '" tabindex="0">' +
+        initialsAvatar(name) + '<span>' + escapeHtml(name) + '</span></div>';
+    }).join('');
+  }
+  panel.innerHTML = html;
+}
+
+function openAssigneeCombo() {
+  var combo = document.getElementById('assignee-combo');
+  if (combo) combo.classList.add('open');
+  renderAssigneeComboOptions('');
+}
+function closeAssigneeCombo() {
+  var combo = document.getElementById('assignee-combo');
+  var input = document.getElementById('assignee-combo-input');
+  var sel = document.getElementById('f-assignee');
+  if (combo) combo.classList.remove('open');
+  // If the user typed something but didn't pick, restore the actual selected value
+  if (input && sel) input.value = sel.value || '';
+}
+
+function onAssigneeComboInput() {
+  openAssigneeCombo();
+  var input = document.getElementById('assignee-combo-input');
+  renderAssigneeComboOptions(input.value);
+}
+
+function onAssigneeComboKey(e) {
+  if (e.key === 'Escape') { closeAssigneeCombo(); e.target.blur(); }
+  else if (e.key === 'Enter') {
+    e.preventDefault();
+    var first = document.querySelector('#assignee-combo-options .assignee-combo-option');
+    if (first) first.click();
+  }
+}
+
+function clearAssigneeFilter() {
+  var sel = document.getElementById('f-assignee');
+  if (sel) sel.value = '';
+  closeAssigneeCombo();
+  onAssigneeChange();
+}
+
+// Click delegation: select an option, close panel, fire change.
+document.addEventListener('click', function(e){
+  var opt = e.target && e.target.closest && e.target.closest('.assignee-combo-option');
+  if (opt) {
+    var sel = document.getElementById('f-assignee');
+    if (sel) sel.value = opt.getAttribute('data-value') || '';
+    closeAssigneeCombo();
+    onAssigneeChange();
+    return;
+  }
+  // Click outside the combo closes the panel
+  var combo = document.getElementById('assignee-combo');
+  if (combo && combo.classList.contains('open') && !combo.contains(e.target)) {
+    closeAssigneeCombo();
+  }
+});
 
 // ─── Filter event handlers ────────────────────────────────────────────
 
@@ -2144,6 +2299,10 @@ function clearAllFilters() {
   if (sprintSel) sprintSel.value = '';
   var assigneeSel = document.getElementById('f-assignee');
   if (assigneeSel) assigneeSel.value = '';
+  var assigneeComboInput = document.getElementById('assignee-combo-input');
+  if (assigneeComboInput) assigneeComboInput.value = '';
+  var combo = document.getElementById('assignee-combo');
+  if (combo) combo.classList.remove('has-value', 'open');
   var emSel = document.getElementById('f-em');
   if (emSel) emSel.value = '';
   var boardSel = document.getElementById('f-board');
@@ -2203,9 +2362,6 @@ function renderSHD() {
   renderSHDKPI();
   renderBoardHealthGrid('board-health-grid');
   renderBurndownChart('chart-burndown');
-  renderVelocityChart('chart-velocity');
-  renderEffortChart();
-  renderCapacityChart();
   renderSHDTable();
 }
 
@@ -3381,18 +3537,39 @@ function renderAssigneeTickets(tickets) {
   if (!tickets.length) {
     return '<div class="assignee-tickets-empty">No tickets for this assignee in the selected sprint.</div>';
   }
-  var totalSP = 0; var doneCount = 0;
+  var totalSP = 0; var doneSP = 0; var doneCount = 0;
   tickets.forEach(function(t){
-    totalSP += (typeof t.sp === 'number' ? t.sp : 0);
-    if (/^(accepted|done)$/i.test(t.status)) doneCount++;
+    var sp = typeof t.sp === 'number' ? t.sp : 0;
+    totalSP += sp;
+    if (/^(accepted|done)$/i.test(t.status)) { doneCount++; doneSP += sp; }
   });
+  totalSP = Math.round(totalSP * 10) / 10;
+  doneSP  = Math.round(doneSP  * 10) / 10;
+  // Capacity widget: SP committed vs default 10 SP/sprint per dev. Color
+  // bands match the rest of the dashboard's load semantics.
+  var cap     = (typeof CAPACITY_DEFAULT_SP === 'number') ? CAPACITY_DEFAULT_SP : 10;
+  var capPct  = cap > 0 ? Math.round(totalSP / cap * 100) : 0;
+  var band    = capPct >= 100 ? 'red' : capPct >= 75 ? 'yellow' : 'green';
+  var capLabel = capPct >= 100 ? 'OVER CAPACITY' : capPct >= 75 ? 'AT CAPACITY' : 'WITHIN CAPACITY';
+  var capacityHTML = '<div class="assignee-capacity">' +
+    '<div class="assignee-capacity-row">' +
+      '<span class="assignee-capacity-fraction"><strong>' + totalSP + '</strong> / ' + cap + ' SP</span>' +
+      '<span class="assignee-capacity-pct ' + band + '">' + capPct + '% · ' + capLabel + '</span>' +
+    '</div>' +
+    '<div class="assignee-capacity-bar"><div class="assignee-capacity-bar-fill ' + band + '" style="width:' + Math.min(100, capPct) + '%"></div></div>' +
+    '<div class="assignee-capacity-meta">' +
+      '<span>' + doneSP + ' SP done · ' + (totalSP - doneSP).toFixed(1).replace(/\.0$/, '') + ' SP remaining</span>' +
+      '<span>Default capacity: ' + cap + ' SP per sprint</span>' +
+    '</div>' +
+  '</div>';
   var summary = '<div class="assignee-tickets-summary">' +
     '<span><strong>' + tickets.length + '</strong> work item' + (tickets.length === 1 ? '' : 's') + '</span>' +
     '<span class="bc-sep">·</span>' +
-    '<span><strong>' + (Math.round(totalSP * 10) / 10) + '</strong> SP</span>' +
+    '<span><strong>' + totalSP + '</strong> SP committed</span>' +
     '<span class="bc-sep">·</span>' +
     '<span><strong>' + doneCount + '</strong> done</span>' +
   '</div>';
+  summary = capacityHTML + summary;
   var rows = tickets.map(function(t){
     var statusClass = statusBadgeClass(t.status);
     var iconCls     = ticketIconClass(t.issueType);

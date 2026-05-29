@@ -127,85 +127,26 @@ test.describe('CIS Org Health Dashboard', () => {
     expect(restoredRows).toBeGreaterThan(filteredRows);
   });
 
-  // ─── Capacity card section ────────────────────────────────────────────────────
+  // ─── Per-assignee tickets modal (capacity widget) ─────────────────────────────
 
-  test('capacity section shows empty state when no board+sprint filter', async ({ page }) => {
-    await page.click('text=Delivery');
-    await page.waitForFunction(() => {
-      const pane = document.getElementById('pane-dhd');
-      return pane && pane.classList.contains('active');
-    }, { timeout: 8_000 });
-
-    // #capacity-cards is present in active pane — check its content
-    const emptyText = await page.evaluate(() => {
-      const el = document.getElementById('capacity-cards');
-      return el ? el.innerText : '';
-    });
-    expect(emptyText).toMatch(/board|sprint/i);
-  });
-
-  test('capacity cards appear after selecting board + specific sprint', async ({ page }) => {
-    // Both board AND a specific sprint are required
-    const boardSel = page.locator('#f-board');
-    const boardOptions = await boardSel.locator('option').allInnerTexts();
-    const firstBoard = boardOptions.find(o => o.trim() && !/all/i.test(o));
-    expect(firstBoard).toBeTruthy();
-    await boardSel.selectOption({ label: firstBoard });
-    await page.waitForTimeout(300);
-
-    // Select first specific sprint (not "All")
-    const sprintSel = page.locator('#f-sprint-sel');
-    const sprintOptions = await sprintSel.locator('option').allInnerTexts();
-    const firstSprint = sprintOptions.find(o => o.trim() && !/all/i.test(o));
-    if (!firstSprint) { test.skip(); return; }
-    await sprintSel.selectOption({ label: firstSprint });
+  test('clicking an avatar opens per-assignee modal with capacity bar', async ({ page }) => {
+    await page.locator('#f-status').selectOption('active');
     await page.waitForTimeout(400);
-
-    // Switch to Delivery tab
-    await page.click('text=Delivery');
-    await page.waitForFunction(() => {
-      const pane = document.getElementById('pane-dhd');
-      return pane && pane.classList.contains('active');
-    }, { timeout: 8_000 });
-
-    const result = await page.evaluate(() => {
-      const el = document.getElementById('capacity-cards');
-      if (!el) return { html: '', text: '' };
-      return { html: el.innerHTML, text: el.innerText };
-    });
-
-    // Must NOT show the empty state prompt
-    expect(result.text).not.toMatch(/Filter by.*board/i);
-
-    // If cards rendered, verify structure
-    if (result.html.includes('cap-card')) {
-      const cards = page.locator('.cap-card');
-      expect(await cards.count()).toBeGreaterThan(0);
-      const fraction = await cards.first().locator('.cap-fraction').innerText();
-      expect(fraction).toMatch(/\d+(\.\d+)? \/ \d+ SP/);
-    }
-  });
-
-  test('capacity section shows empty state when board selected but no specific sprint', async ({ page }) => {
-    // Board alone is not enough — a specific sprint must also be selected
-    const boardSel = page.locator('#f-board');
-    const boardOptions = await boardSel.locator('option').allInnerTexts();
-    const firstBoard = boardOptions.find(o => o.trim() && !/all/i.test(o));
-    expect(firstBoard).toBeTruthy();
-    await boardSel.selectOption({ label: firstBoard });
-    await page.waitForTimeout(300);
-
-    await page.click('text=Delivery');
-    await page.waitForFunction(() => {
-      const pane = document.getElementById('pane-dhd');
-      return pane && pane.classList.contains('active');
-    }, { timeout: 8_000 });
-
-    const text = await page.evaluate(() => {
-      const el = document.getElementById('capacity-cards');
-      return el ? el.innerText : '';
-    });
-    expect(text).toMatch(/board|sprint/i);
+    const avatar = page.locator('.js-assignee-trigger').first();
+    await expect(avatar).toBeVisible({ timeout: 5_000 });
+    await avatar.click();
+    const modal = page.locator('#assignee-tickets-modal.open');
+    await expect(modal).toBeVisible({ timeout: 3_000 });
+    // Capacity widget renders
+    await expect(modal.locator('.assignee-capacity')).toBeVisible();
+    // Fraction text matches "X / N SP" pattern
+    const fraction = await modal.locator('.assignee-capacity-fraction').innerText();
+    expect(fraction).toMatch(/\d+(\.\d+)? \/ \d+ SP/);
+    // At least one ticket row
+    const ticketRows = modal.locator('.assignee-ticket-row');
+    expect(await ticketRows.count()).toBeGreaterThan(0);
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#assignee-tickets-modal.open')).toHaveCount(0);
   });
 
   // ─── Sync banner ─────────────────────────────────────────────────────────────
