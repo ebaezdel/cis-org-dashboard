@@ -325,12 +325,13 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-s
 
 /* Status chips — Jira-style Todo / In Progress / Done counts */
 .bc-status-chips{display:flex;gap:6px;margin:8px 0 4px;}
-.bc-chip{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:6px 4px;border-radius:6px;min-width:0;cursor:pointer;transition:transform .12s,filter .12s,box-shadow .12s;}
+.bc-chip{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:8px 4px 6px;border-radius:6px;min-width:0;cursor:pointer;transition:transform .12s,filter .12s,box-shadow .12s;}
 .bc-chip:hover{transform:translateY(-1px);filter:brightness(.95);box-shadow:0 3px 8px rgba(15,23,42,.08);}
 .bc-chip:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
-.bc-chip-num{font-size:16px;font-weight:700;line-height:1;}
-.bc-chip-sub{font-size:9px;font-weight:600;color:inherit;opacity:.7;margin-top:2px;}
-.bc-chip-label{font-size:8px;font-weight:600;letter-spacing:.4px;text-transform:uppercase;margin-top:2px;}
+.bc-chip-num{font-size:18px;font-weight:700;line-height:1;display:inline-flex;align-items:baseline;gap:2px;}
+.bc-chip-num .bc-chip-unit{font-size:10px;font-weight:600;opacity:.65;letter-spacing:.3px;}
+.bc-chip-sub{font-size:10px;font-weight:500;color:inherit;opacity:.65;margin-top:3px;}
+.bc-chip-label{font-size:8px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;margin-top:3px;opacity:.85;}
 .bc-chip-todo{background:#f1f5f9;color:#475569;}
 .bc-chip-todo .bc-chip-label{color:#64748b;}
 .bc-chip-inprog{background:#dbeafe;color:#1d4ed8;}
@@ -458,7 +459,7 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-s
 .closeout-table .closeout-sprint{font-family:'SFMono-Regular',Consolas,Menlo,monospace;font-size:11px;color:var(--muted);}
 .closeout-table .closeout-arrow{display:inline-block;width:14px;color:var(--muted2);transition:transform .15s;font-size:10px;}
 .closeout-table tr.open .closeout-arrow{transform:rotate(90deg);color:var(--accent);}
-.closeout-bar{display:flex;height:8px;border-radius:4px;overflow:hidden;background:var(--surface2);min-width:140px;}
+.closeout-bar{display:flex;height:10px;border-radius:5px;overflow:hidden;background:var(--surface2);min-width:160px;}
 .closeout-bar > span{display:block;height:100%;}
 .closeout-bar .seg-completed{background:#16a34a;}
 .closeout-bar .seg-carryover{background:#d97706;}
@@ -466,6 +467,21 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-s
 .closeout-bar .seg-inprogress{background:#2563eb;}
 .closeout-bar .seg-todo{background:#cbd5e1;}
 .closeout-summary .stat.blue strong{color:#2563eb;}
+/* Mini bucket pills under the distribution bar — make SP + items
+   instantly readable at a glance with Jira-colored chips. */
+.closeout-bucket-pills{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;}
+.closeout-bucket-pill{display:inline-flex;align-items:baseline;gap:4px;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600;line-height:1.4;white-space:nowrap;}
+.closeout-bucket-pill .bp-sp{font-size:11px;font-weight:700;}
+.closeout-bucket-pill .bp-unit{font-size:8px;font-weight:600;opacity:.7;letter-spacing:.3px;text-transform:uppercase;margin-left:1px;}
+.closeout-bucket-pill .bp-sep{opacity:.4;margin:0 1px;}
+.closeout-bucket-pill .bp-items{font-size:10px;font-weight:500;opacity:.75;}
+.closeout-bucket-pill .bp-label{font-size:8px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;opacity:.7;margin-left:2px;}
+.closeout-bucket-pill.bp-done{background:#dcfce7;color:#15803d;}
+.closeout-bucket-pill.bp-inprog{background:#dbeafe;color:#1d4ed8;}
+.closeout-bucket-pill.bp-todo{background:#f1f5f9;color:#475569;}
+.closeout-bucket-pill.bp-carryover{background:#fef3c7;color:#92400e;}
+.closeout-bucket-pill.bp-cancelled{background:#f1f5f9;color:#64748b;}
+.closeout-bucket-pill.bp-empty{opacity:.45;}
 .closeout-assignee-badge{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;background:rgba(59,130,246,.1);color:var(--accent);border-radius:12px;font-size:11px;font-weight:600;margin-right:6px;}
 .closeout-assignee-badge::before{content:'👤';font-size:11px;}
 .co-bucket-inprog{background:#eff6ff;border-color:#dbeafe;}
@@ -2480,9 +2496,10 @@ function renderSHDKPI() {
     : 'across active sprints';
   if (assigneeF) scopeLabel = scopeLabel + ' · ' + assigneeF;
 
+  var totalCount = todoCount + inprogCount + doneCount;
   var kpis = [
-    { label:'% Done', value: pctDone + '%', color: pctColor(pctDone),
-      sub: Math.round(totalSP * 10) / 10 + ' SP committed · ' + scopeLabel,
+    { label:'Sprint Resolution', value: pctDone + '%', color: pctColor(pctDone),
+      sub: doneSP + ' / ' + (Math.round(totalSP * 10) / 10) + ' SP · ' + totalCount + (totalCount === 1 ? ' item' : ' items') + ' · ' + scopeLabel,
       pct: pctDone },
     { label:'To Do', value: todoSP + ' SP', color: 'kpi-todo', cardClass: 'kpi-todo-card',
       sub: todoCount + (todoCount === 1 ? ' item' : ' items'), bucket: 'todo' },
@@ -2760,22 +2777,17 @@ function renderBoardHealthGrid(containerId) {
             'role="button" tabindex="0" ' +
             'title="' + n + ' item' + (n === 1 ? '' : 's') + ' — click to view"';
         };
+        var spChip = function(sp, n, label, bucket){
+          return '<div ' + dataAttrs(bucket, n) + '>' +
+            '<div class="bc-chip-num">' + sp + '<span class="bc-chip-unit">SP</span></div>' +
+            '<div class="bc-chip-sub">' + n + (n === 1 ? ' item' : ' items') + '</div>' +
+            '<div class="bc-chip-label">' + label + '</div>' +
+          '</div>';
+        };
         return '<div class="bc-status-chips">' +
-          '<div ' + dataAttrs('todo', chips.todoN) + '>' +
-            '<div class="bc-chip-num">'   + chips.todo   + '</div>' +
-            '<div class="bc-chip-sub">' + chips.todoN + (chips.todoN === 1 ? ' item' : ' items') + '</div>' +
-            '<div class="bc-chip-label">To Do</div>' +
-          '</div>' +
-          '<div ' + dataAttrs('inprog', chips.inprogN) + '>' +
-            '<div class="bc-chip-num">' + chips.inprog + '</div>' +
-            '<div class="bc-chip-sub">' + chips.inprogN + (chips.inprogN === 1 ? ' item' : ' items') + '</div>' +
-            '<div class="bc-chip-label">In Prog</div>' +
-          '</div>' +
-          '<div ' + dataAttrs('done', chips.doneN) + '>' +
-            '<div class="bc-chip-num">'   + chips.done   + '</div>' +
-            '<div class="bc-chip-sub">' + chips.doneN + (chips.doneN === 1 ? ' item' : ' items') + '</div>' +
-            '<div class="bc-chip-label">Done</div>' +
-          '</div>' +
+          spChip(chips.todo,   chips.todoN,   'To Do',   'todo') +
+          spChip(chips.inprog, chips.inprogN, 'In Prog', 'inprog') +
+          spChip(chips.done,   chips.doneN,   'Done',    'done') +
         '</div>';
       })();
 
@@ -3490,6 +3502,24 @@ function classifyCloseout(row) {
   return out;
 }
 
+// Render a row of mini bucket pills under the distribution bar so users
+// can read SP + items at a glance per status bucket. Empty buckets are
+// dimmed but still rendered to keep horizontal alignment across rows.
+function bucketPillsHTML(pills) {
+  return '<div class="closeout-bucket-pills">' + pills.map(function(p){
+    var emptyCls = (p.n === 0 && p.sp === 0) ? ' bp-empty' : '';
+    var sp = (Math.round((p.sp || 0) * 10) / 10);
+    return '<span class="closeout-bucket-pill ' + p.cls + emptyCls + '" ' +
+             'title="' + p.label + ' — ' + sp + ' SP across ' + p.n + ' item' + (p.n === 1 ? '' : 's') + '">' +
+             '<span class="bp-sp">' + sp + '</span>' +
+             '<span class="bp-unit">SP</span>' +
+             '<span class="bp-sep">·</span>' +
+             '<span class="bp-items">' + p.n + (p.n === 1 ? ' item' : ' items') + '</span>' +
+             '<span class="bp-label">' + p.label + '</span>' +
+           '</span>';
+  }).join('') + '</div>';
+}
+
 function pctBand(p) {
   return p >= 80 ? 'green' : p >= 50 ? 'amber' : 'red';
 }
@@ -3712,7 +3742,11 @@ function renderClosedTable(el, rows, assigneeFilter) {
         '<span class="seg-carryover" style="width:' + pctK + '%"></span>' +
         '<span class="seg-cancelled" style="width:' + pctX + '%"></span>' +
       '</div>' +
-      '<div style="font-size:10px;color:var(--muted);margin-top:4px;">' + c.completed.count + ' done · ' + c.carryover.count + ' carryover · ' + c.cancelled.count + ' cancelled</div>' +
+      bucketPillsHTML([
+        { cls:'bp-done',      sp:c.completed.sp, n:c.completed.count, label:'Done' },
+        { cls:'bp-carryover', sp:c.carryover.sp, n:c.carryover.count, label:'Carryover' },
+        { cls:'bp-cancelled', sp:c.cancelled.sp, n:c.cancelled.count, label:'Cancelled' },
+      ]) +
       '</td>' +
       '<td class="num"><span class="closeout-pct ' + pctBand(pctC) + '">' + pctC + '%</span></td>' +
     '</tr>';
@@ -3805,7 +3839,11 @@ function renderActiveTable(el, rows, assigneeFilter) {
         '<span class="seg-inprogress" style="width:' + pctI + '%"></span>' +
         '<span class="seg-todo" style="width:' + pctT + '%"></span>' +
       '</div>' +
-      '<div style="font-size:10px;color:var(--muted);margin-top:4px;">' + c.done.count + ' done · ' + c.inprog.count + ' in prog · ' + c.todo.count + ' to do</div>' +
+      bucketPillsHTML([
+        { cls:'bp-done',   sp:c.done.sp,   n:c.done.count,   label:'Done' },
+        { cls:'bp-inprog', sp:c.inprog.sp, n:c.inprog.count, label:'In Prog' },
+        { cls:'bp-todo',   sp:c.todo.sp,   n:c.todo.count,   label:'To Do' },
+      ]) +
       '</td>' +
       '<td class="num"><span class="closeout-pct ' + pctBand(pctD) + '">' + pctD + '%</span></td>' +
     '</tr>';
