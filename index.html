@@ -412,6 +412,46 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-s
 .assignee-capacity-bar-fill.red{background:#dc2626;}
 .assignee-capacity-meta{font-size:10px;color:var(--muted);margin-top:6px;display:flex;justify-content:space-between;}
 
+/* Sprint Closeout — carryover analysis table */
+.closeout-wrap{background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:20px;}
+.closeout-empty{padding:24px;text-align:center;color:var(--muted);font-size:12px;}
+.closeout-summary{display:flex;align-items:center;gap:18px;padding:12px 18px;background:var(--surface2);border-bottom:1px solid var(--border);font-size:11px;color:var(--muted);flex-wrap:wrap;}
+.closeout-summary .stat{display:flex;align-items:baseline;gap:5px;}
+.closeout-summary .stat strong{color:var(--text);font-size:14px;font-weight:700;}
+.closeout-summary .stat.green strong{color:#16a34a;}
+.closeout-summary .stat.amber strong{color:#d97706;}
+.closeout-summary .stat.red strong{color:#dc2626;}
+.closeout-table{width:100%;border-collapse:collapse;font-size:12px;}
+.closeout-table th{text-align:left;padding:10px 12px;font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;background:var(--surface2);border-bottom:1px solid var(--border);white-space:nowrap;}
+.closeout-table th.num,.closeout-table td.num{text-align:right;}
+.closeout-table tbody tr.closeout-summary-row{cursor:pointer;border-bottom:1px solid var(--border);}
+.closeout-table tbody tr.closeout-summary-row:hover td{background:var(--surface2);}
+.closeout-table tbody tr.closeout-summary-row.open td{background:rgba(59,130,246,.05);border-bottom-color:transparent;}
+.closeout-table td{padding:10px 12px;color:var(--text);vertical-align:middle;}
+.closeout-table .closeout-board{font-weight:700;color:var(--text);}
+.closeout-table .closeout-sprint{font-family:'SFMono-Regular',Consolas,Menlo,monospace;font-size:11px;color:var(--muted);}
+.closeout-table .closeout-arrow{display:inline-block;width:14px;color:var(--muted2);transition:transform .15s;font-size:10px;}
+.closeout-table tr.open .closeout-arrow{transform:rotate(90deg);color:var(--accent);}
+.closeout-bar{display:flex;height:8px;border-radius:4px;overflow:hidden;background:var(--surface2);min-width:140px;}
+.closeout-bar > span{display:block;height:100%;}
+.closeout-bar .seg-completed{background:#16a34a;}
+.closeout-bar .seg-carryover{background:#d97706;}
+.closeout-bar .seg-cancelled{background:#94a3b8;}
+.closeout-pct{display:inline-block;font-weight:700;font-size:11px;padding:2px 8px;border-radius:10px;min-width:42px;text-align:center;}
+.closeout-pct.green{background:#dcfce7;color:#166534;}
+.closeout-pct.amber{background:#fef3c7;color:#92400e;}
+.closeout-pct.red{background:#fee2e2;color:#991b1b;}
+.closeout-detail-row{background:var(--surface);}
+.closeout-detail-row td{padding:0;}
+tr.closeout-detail-row.hidden{display:none;}
+.closeout-detail-inner{padding:14px 24px 18px;border-bottom:1px solid var(--border);}
+.closeout-detail-section{margin-bottom:14px;}
+.closeout-detail-section:last-child{margin-bottom:0;}
+.closeout-detail-section-title{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;display:flex;align-items:center;gap:8px;}
+.closeout-detail-section-title .count{color:var(--text);background:var(--surface2);padding:2px 8px;border-radius:10px;font-size:10px;}
+.closeout-tickets{display:flex;flex-direction:column;gap:1px;}
+/* Reuse the assignee-ticket-row styling for visual consistency */
+
 /* Charts row */
 .charts-row{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px;}
 .charts-row-single{grid-template-columns:1fr;}
@@ -778,12 +818,8 @@ tr.ticket-col-hdr.hidden{display:none;}
   <div id="shd-kpi" class="kpi-strip"></div>
   <div class="section-heading" id="board-health-heading">Board Health &mdash; Active Sprint</div>
   <div class="board-grid" id="board-health-grid"></div>
-  <div class="charts-row charts-row-single">
-    <div class="chart-card">
-      <h3>Issues by Status <span class="sub">To Do · In Progress · Done per board</span></h3>
-      <div class="chart-wrap"><canvas id="chart-burndown"></canvas></div>
-    </div>
-  </div>
+  <div class="section-heading">Sprint Closeout — Carryover Analysis</div>
+  <div id="sprint-closeout"></div>
   <div class="section-heading">Sprint Data Table</div>
   <div class="table-wrap">
     <table>
@@ -2356,7 +2392,7 @@ function destroyChart(id) {
 function renderSHD() {
   renderSHDKPI();
   renderBoardHealthGrid('board-health-grid');
-  renderBurndownChart('chart-burndown');
+  renderSprintCloseout('sprint-closeout');
   renderSHDTable();
 }
 
@@ -3314,6 +3350,183 @@ function renderSHDTable() {
   '</tr>';
 
   tbody.innerHTML = html;
+}
+
+// ─── Sprint Closeout (carryover analysis) ────────────────────────────────────
+
+// Bucket every ticket on a closed sprint into one of three outcomes by status:
+//   completed  — work that finished (Accepted/Done)
+//   carryover  — work that was committed but didn't finish (in motion or
+//                still queued at sprint close)
+//   cancelled  — work that was abandoned (Cancelled / Won't Do)
+// Returns counts + SP totals + the actual ticket arrays for drill-down.
+function classifyCloseout(row) {
+  var COMPLETED_RE = /^(accepted|done|complete[d]?|resolved|closed)$/i;
+  var CANCELLED_RE = /^(cancelled|canceled|won.?t.?do)$/i;
+  var out = {
+    completed: { count: 0, sp: 0, tickets: [] },
+    carryover: { count: 0, sp: 0, tickets: [] },
+    cancelled: { count: 0, sp: 0, tickets: [] },
+  };
+  (row.epicBreakdown || []).forEach(function(epic){
+    (epic.tickets || []).forEach(function(t){
+      var bucket;
+      if      (COMPLETED_RE.test(t.status || '')) bucket = 'completed';
+      else if (CANCELLED_RE.test(t.status || '')) bucket = 'cancelled';
+      else                                        bucket = 'carryover';
+      var sp = (typeof t.sp === 'number') ? t.sp : 0;
+      out[bucket].count += 1;
+      out[bucket].sp    += sp;
+      out[bucket].tickets.push(Object.assign({}, t, { epicLabel: epic.label || '' }));
+    });
+  });
+  // Round SP totals
+  ['completed','carryover','cancelled'].forEach(function(b){
+    out[b].sp = Math.round(out[b].sp * 10) / 10;
+    // Sort tickets by SP desc for the drill-down view
+    out[b].tickets.sort(function(a, c){
+      var sa = a.sp == null ? -1 : a.sp;
+      var sc = c.sp == null ? -1 : c.sp;
+      return sc - sa;
+    });
+  });
+  return out;
+}
+
+function pctBand(p) {
+  return p >= 80 ? 'green' : p >= 50 ? 'amber' : 'red';
+}
+
+function renderCloseoutTickets(tickets) {
+  if (!tickets.length) return '<div class="assignee-tickets-empty">None.</div>';
+  var rows = tickets.map(function(t){
+    var statusClass = statusBadgeClass(t.status);
+    var iconCls     = ticketIconClass(t.issueType);
+    var iconLetter  = ticketIconLetter(t.issueType);
+    var keyClass    = 'atr-key' + (/cancel/i.test(t.status) ? ' cancelled' : '');
+    var spStr       = t.sp == null ? '–' : t.sp;
+    var browseUrl   = 'https://moveinc.atlassian.net/browse/' + encodeURIComponent(t.key);
+    return '<a class="assignee-ticket-row" href="' + browseUrl + '" target="_blank" rel="noopener">' +
+      '<span class="atr-icon ' + iconCls + '" title="' + escapeHtml(t.issueType || '') + '">' + iconLetter + '</span>' +
+      '<span class="' + keyClass + '">' + escapeHtml(t.key) + '</span>' +
+      '<span class="atr-title" title="' + escapeHtml(t.title || '') + '">' + escapeHtml(t.title || '') + '</span>' +
+      '<span class="atr-status ' + statusClass + '">' + escapeHtml(t.status || '—') + '</span>' +
+      '<span class="atr-sp" title="Story points">' + spStr + '</span>' +
+    '</a>';
+  }).join('');
+  return '<div class="closeout-tickets">' + rows + '</div>';
+}
+
+function renderSprintCloseout(elId) {
+  var el = document.getElementById(elId);
+  if (!el) return;
+  // Source: closed sprints in FILTERED, most recent first. Cap at 12 to keep
+  // the table scannable; users can refine via filters to see specific ones.
+  var source = (FILTERED.length ? FILTERED : ALL_SPRINTS_FY26)
+    .filter(function(d){ return d.sprintStatus === 'closed' && d.totalSP > 0; });
+  source.sort(function(a, b){
+    if (b.fy !== a.fy)        return (b.fy || '').localeCompare(a.fy || '');
+    if (b.sprint !== a.sprint) return b.sprint - a.sprint;
+    return (a.board || '').localeCompare(b.board || '');
+  });
+  var rows = source.slice(0, 12);
+  if (!rows.length) {
+    el.innerHTML = '<div class="closeout-wrap"><div class="closeout-empty">No closed sprints in the current filter. Adjust filters or wait for the next sprint to close.</div></div>';
+    return;
+  }
+  // Roll up totals across the visible rows for the summary strip
+  var tot = { completed: 0, carryover: 0, cancelled: 0, completedSP: 0, carryoverSP: 0, cancelledSP: 0, items: 0 };
+  var classified = rows.map(function(d){
+    var c = classifyCloseout(d);
+    tot.completed   += c.completed.count;
+    tot.carryover   += c.carryover.count;
+    tot.cancelled   += c.cancelled.count;
+    tot.completedSP += c.completed.sp;
+    tot.carryoverSP += c.carryover.sp;
+    tot.cancelledSP += c.cancelled.sp;
+    tot.items       += c.completed.count + c.carryover.count + c.cancelled.count;
+    return { row: d, c: c };
+  });
+  var totSP = tot.completedSP + tot.carryoverSP + tot.cancelledSP;
+  var avgCompletion = totSP > 0 ? Math.round(tot.completedSP / totSP * 100) : 0;
+  var carryoverPct  = totSP > 0 ? Math.round(tot.carryoverSP / totSP * 100) : 0;
+
+  var html = '<div class="closeout-wrap">' +
+    '<div class="closeout-summary">' +
+      '<div class="stat"><strong>' + rows.length + '</strong><span>sprints</span></div>' +
+      '<span class="bc-sep">·</span>' +
+      '<div class="stat green"><strong>' + tot.completed + '</strong><span>completed (' + Math.round(tot.completedSP * 10) / 10 + ' SP)</span></div>' +
+      '<div class="stat amber"><strong>' + tot.carryover + '</strong><span>carryover (' + Math.round(tot.carryoverSP * 10) / 10 + ' SP)</span></div>' +
+      '<div class="stat"><strong style="color:var(--muted)">' + tot.cancelled + '</strong><span>cancelled (' + Math.round(tot.cancelledSP * 10) / 10 + ' SP)</span></div>' +
+      '<span class="bc-sep">·</span>' +
+      '<div class="stat"><span>avg completion</span><strong>' + avgCompletion + '%</strong></div>' +
+      '<div class="stat"><span>carryover rate</span><strong>' + carryoverPct + '%</strong></div>' +
+    '</div>' +
+    '<table class="closeout-table">' +
+      '<thead><tr>' +
+        '<th style="width:24px;"></th>' +
+        '<th>Board · Sprint</th>' +
+        '<th class="num">Items</th>' +
+        '<th class="num">SP</th>' +
+        '<th>Distribution</th>' +
+        '<th class="num">% Complete</th>' +
+      '</tr></thead><tbody>';
+
+  classified.forEach(function(entry, idx){
+    var d = entry.row;
+    var c = entry.c;
+    var totalCount = c.completed.count + c.carryover.count + c.cancelled.count;
+    var totalSP    = c.completed.sp    + c.carryover.sp    + c.cancelled.sp;
+    var pctC = totalSP > 0 ? Math.round(c.completed.sp / totalSP * 100) : 0;
+    var pctK = totalSP > 0 ? Math.round(c.carryover.sp / totalSP * 100) : 0;
+    var pctX = totalSP > 0 ? Math.max(0, 100 - pctC - pctK)              : 0;
+    var rid = 'co-' + idx;
+    html += '<tr class="closeout-summary-row" id="' + rid + '" onclick="toggleCloseoutDetail(\'' + rid + '\')">' +
+      '<td><span class="closeout-arrow">▶</span></td>' +
+      '<td><span class="closeout-board">' + escapeHtml(d.board) + '</span> · <span class="closeout-sprint">' + escapeHtml(d.sprintName) + '</span>' +
+        '<div style="font-size:10px;color:var(--muted);margin-top:2px;">' + escapeHtml(d.startDate || '') + ' → ' + escapeHtml(d.endDate || '') + ' · EM: ' + escapeHtml(d.em || '') + '</div>' +
+      '</td>' +
+      '<td class="num">' + totalCount + '</td>' +
+      '<td class="num">' + (Math.round(totalSP * 10) / 10) + '</td>' +
+      '<td><div class="closeout-bar" title="Completed ' + pctC + '% · Carryover ' + pctK + '% · Cancelled ' + pctX + '%">' +
+        '<span class="seg-completed" style="width:' + pctC + '%"></span>' +
+        '<span class="seg-carryover" style="width:' + pctK + '%"></span>' +
+        '<span class="seg-cancelled" style="width:' + pctX + '%"></span>' +
+      '</div>' +
+      '<div style="font-size:10px;color:var(--muted);margin-top:4px;">' + c.completed.count + ' done · ' + c.carryover.count + ' carryover · ' + c.cancelled.count + ' cancelled</div>' +
+      '</td>' +
+      '<td class="num"><span class="closeout-pct ' + pctBand(pctC) + '">' + pctC + '%</span></td>' +
+    '</tr>';
+    // Detail row (hidden by default, expanded via toggle)
+    html += '<tr class="closeout-detail-row hidden" data-parent="' + rid + '">' +
+      '<td colspan="6"><div class="closeout-detail-inner">' +
+        '<div class="closeout-detail-section">' +
+          '<div class="closeout-detail-section-title">Carryover <span class="count">' + c.carryover.count + ' items · ' + c.carryover.sp + ' SP</span></div>' +
+          renderCloseoutTickets(c.carryover.tickets) +
+        '</div>' +
+        '<div class="closeout-detail-section">' +
+          '<div class="closeout-detail-section-title">Cancelled <span class="count">' + c.cancelled.count + ' items · ' + c.cancelled.sp + ' SP</span></div>' +
+          renderCloseoutTickets(c.cancelled.tickets) +
+        '</div>' +
+        '<div class="closeout-detail-section">' +
+          '<div class="closeout-detail-section-title">Completed <span class="count">' + c.completed.count + ' items · ' + c.completed.sp + ' SP</span></div>' +
+          renderCloseoutTickets(c.completed.tickets) +
+        '</div>' +
+      '</div></td>' +
+    '</tr>';
+  });
+
+  html += '</tbody></table></div>';
+  el.innerHTML = html;
+}
+
+function toggleCloseoutDetail(rowId) {
+  var summary = document.getElementById(rowId);
+  if (!summary) return;
+  var detail = document.querySelector('tr.closeout-detail-row[data-parent="' + rowId + '"]');
+  if (!detail) return;
+  var open = detail.classList.toggle('hidden') === false;
+  summary.classList.toggle('open', open);
 }
 
 function toggleGoal(el) {

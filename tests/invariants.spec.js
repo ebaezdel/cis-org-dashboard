@@ -297,6 +297,23 @@ test.describe('Dashboard data invariants', () => {
     expect(offenders, 'cards where chip sum != items count:\n' + JSON.stringify(offenders, null, 2)).toEqual([]);
   });
 
+  test('sprint closeout table renders with at least one closed sprint row and expands on click', async ({ page }) => {
+    const wrap = page.locator('#sprint-closeout');
+    await expect(wrap).toBeVisible();
+    const summaryRow = page.locator('#sprint-closeout tr.closeout-summary-row').first();
+    await expect(summaryRow).toBeVisible({ timeout: 5_000 });
+    const cellsCount = await summaryRow.locator('td').count();
+    expect(cellsCount).toBeGreaterThanOrEqual(6);
+    const rowId = await summaryRow.evaluate(tr => tr.id);
+    expect(rowId).toMatch(/^co-/);
+    await summaryRow.click();
+    const detail = page.locator('tr.closeout-detail-row[data-parent="' + rowId + '"]');
+    await expect(detail).toBeVisible();
+    const titles = await detail.locator('.closeout-detail-section-title').allInnerTexts();
+    expect(titles.length).toBe(3);
+    expect(titles.join(' ')).toMatch(/Carryover[\s\S]*Cancelled[\s\S]*Completed/i);
+  });
+
   test('clicking a board card ⋯ button opens the workload modal with at least one assignee row', async ({ page }) => {
     await page.locator('#f-status').selectOption('active');
     await page.waitForTimeout(400);
