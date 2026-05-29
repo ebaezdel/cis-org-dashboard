@@ -415,6 +415,14 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-s
 .assignee-capacity-bar-fill.red{background:#dc2626;}
 .assignee-capacity-meta{font-size:10px;color:var(--muted);margin-top:6px;display:flex;justify-content:space-between;}
 
+/* Sprint Closeout / Active sprints unified widget */
+.closeout-section-head{display:flex;align-items:center;justify-content:space-between;margin:18px 0 8px;gap:14px;flex-wrap:wrap;}
+.closeout-section-head .section-heading{margin:0;}
+.closeout-toggle{display:inline-flex;align-items:center;background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:3px;gap:2px;}
+.closeout-pill{background:none;border:none;padding:6px 14px;font-size:11px;font-weight:600;color:var(--muted);cursor:pointer;border-radius:5px;font-family:inherit;letter-spacing:.2px;transition:all .15s;}
+.closeout-pill:hover{color:var(--text);}
+.closeout-pill.active{background:var(--surface);color:var(--text);box-shadow:0 1px 2px rgba(15,23,42,.06);}
+
 /* Sprint Closeout — carryover analysis table */
 .closeout-wrap{background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:20px;}
 .closeout-empty{padding:24px;text-align:center;color:var(--muted);font-size:12px;}
@@ -440,6 +448,15 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-s
 .closeout-bar .seg-completed{background:#16a34a;}
 .closeout-bar .seg-carryover{background:#d97706;}
 .closeout-bar .seg-cancelled{background:#94a3b8;}
+.closeout-bar .seg-inprogress{background:#2563eb;}
+.closeout-bar .seg-todo{background:#cbd5e1;}
+.closeout-summary .stat.blue strong{color:#2563eb;}
+.closeout-assignee-badge{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;background:rgba(59,130,246,.1);color:var(--accent);border-radius:12px;font-size:11px;font-weight:600;margin-right:6px;}
+.closeout-assignee-badge::before{content:'👤';font-size:11px;}
+.co-bucket-inprog{background:#eff6ff;border-color:#dbeafe;}
+.co-bucket-inprog:hover{background:#dbeafe;}
+.co-bucket-todo{background:#f8fafc;border-color:#e2e8f0;}
+.co-bucket-todo:hover{background:#f1f5f9;}
 .closeout-pct{display:inline-block;font-weight:700;font-size:11px;padding:2px 8px;border-radius:10px;min-width:42px;text-align:center;}
 .closeout-pct.green{background:#dcfce7;color:#166534;}
 .closeout-pct.amber{background:#fef3c7;color:#92400e;}
@@ -841,7 +858,13 @@ tr.ticket-col-hdr.hidden{display:none;}
   <div id="shd-kpi" class="kpi-strip"></div>
   <div class="section-heading" id="board-health-heading">Board Health &mdash; Active Sprint</div>
   <div class="board-grid" id="board-health-grid"></div>
-  <div class="section-heading">Sprint Closeout — Carryover Analysis</div>
+  <div class="closeout-section-head">
+    <div class="section-heading" id="sprint-closeout-heading">Sprint Closeout — Carryover Analysis</div>
+    <div class="closeout-toggle" role="tablist">
+      <button type="button" class="closeout-pill" data-mode="active" role="tab" aria-selected="false" onclick="setCloseoutMode('active')">Active Sprints</button>
+      <button type="button" class="closeout-pill active" data-mode="closed" role="tab" aria-selected="true" onclick="setCloseoutMode('closed')">Sprint Closeout</button>
+    </div>
+  </div>
   <div id="sprint-closeout"></div>
 </div>
 
@@ -2469,8 +2492,14 @@ function renderBoardHealthGrid(containerId) {
 
   updateBoardHealthHeading();
 
-  // Aggregate all FILTERED rows per board
-  var source = FILTERED.length ? FILTERED : ACTIVE_SPRINTS;
+  // Aggregate all FILTERED rows per board. When the user has selected any
+  // filter, respect FILTERED even if it ends up empty — falling back to all
+  // active sprints would silently undo their selection.
+  var anyFilter = !!(sprintF || qF || statusF || periodF ||
+    (document.getElementById('f-assignee') || {}).value ||
+    (document.getElementById('f-em') || {}).value ||
+    (document.getElementById('f-board') || {}).value);
+  var source = anyFilter ? FILTERED : (FILTERED.length ? FILTERED : ACTIVE_SPRINTS);
   var byBoard = {};
   var statusRank = {active:3, future:2, closed:1, none:0};
   source.forEach(function(d){
@@ -2511,7 +2540,10 @@ function renderBoardHealthGrid(containerId) {
   });
 
   // When filtering by active, show stub cards for boards with no active sprint
-  if (statusF === 'active') {
+  // — but skip stubs entirely when an assignee filter is on (the user wants a
+  // focused view of just where their person is working).
+  var assigneeF = (document.getElementById('f-assignee') || {}).value || '';
+  if (statusF === 'active' && !assigneeF) {
     var allBoards = ALL_DATA.reduce(function(acc, d) {
       if (acc.indexOf(d.board) === -1) acc.push(d.board);
       return acc;
@@ -3432,42 +3464,150 @@ function renderCloseoutTickets(tickets, bucket) {
   return '<div class="closeout-tickets">' + rows + '</div>';
 }
 
+// Toggle state for the unified closeout/active widget. Persists for the
+// duration of the page visit; default is 'closed' (carryover analysis is
+// the more analytical view; active is the in-flight snapshot).
+var CLOSEOUT_MODE = 'closed';
+
+function setCloseoutMode(mode) {
+  if (mode !== 'active' && mode !== 'closed') return;
+  CLOSEOUT_MODE = mode;
+  // Update pill state visually
+  var pills = document.querySelectorAll('.closeout-pill');
+  pills.forEach(function(p){
+    var on = p.getAttribute('data-mode') === mode;
+    p.classList.toggle('active', on);
+    p.setAttribute('aria-selected', on ? 'true' : 'false');
+  });
+  // Update title to match mode
+  var heading = document.getElementById('sprint-closeout-heading');
+  if (heading) {
+    heading.textContent = mode === 'active'
+      ? 'Active Sprints — Live Snapshot'
+      : 'Sprint Closeout — Carryover Analysis';
+  }
+  renderSprintCloseout('sprint-closeout');
+}
+
+// Reuse classifyCloseout for both modes. For active sprints we want
+// To Do / In Progress / Done buckets (no Cancelled, since work hasn't
+// concluded). The classifyer already handles Cancelled separately;
+// we just split carryover into todo+inprog when needed.
+function classifyActive(row) {
+  var IN_PROG_RE = /(in.?progress|test.?complete|dev.?(?:elopment.?)?complete|in.?review|pending.?approval|review|blocked)/i;
+  var DONE_RE    = /^(accepted|done|complete[d]?|resolved|closed)$/i;
+  var CANCELLED  = /^(cancelled|canceled|won.?t.?do)$/i;
+  var out = {
+    done:   { count: 0, sp: 0, tickets: [] },
+    inprog: { count: 0, sp: 0, tickets: [] },
+    todo:   { count: 0, sp: 0, tickets: [] },
+  };
+  (row.epicBreakdown || []).forEach(function(epic){
+    (epic.tickets || []).forEach(function(t){
+      if (CANCELLED.test(t.status || '')) return; // skip cancelled in active view
+      var bucket;
+      if      (DONE_RE.test(t.status || ''))    bucket = 'done';
+      else if (IN_PROG_RE.test(t.status || '')) bucket = 'inprog';
+      else                                      bucket = 'todo';
+      var sp = (typeof t.sp === 'number') ? t.sp : 0;
+      out[bucket].count += 1;
+      out[bucket].sp    += sp;
+      out[bucket].tickets.push(Object.assign({}, t, { epicLabel: epic.label || '' }));
+    });
+  });
+  ['done','inprog','todo'].forEach(function(b){
+    out[b].sp = Math.round(out[b].sp * 10) / 10;
+    out[b].tickets.sort(function(a, c){
+      var sa = a.sp == null ? -1 : a.sp;
+      var sc = c.sp == null ? -1 : c.sp;
+      return sc - sa;
+    });
+  });
+  return out;
+}
+
+// Filter ticket arrays inside a bucket to only those assigned to `name`.
+// Returns a NEW bucket-shaped object so callers can compare counts before/after.
+function filterBucketByAssignee(bucket, name) {
+  if (!name) return bucket;
+  var tickets = (bucket.tickets || []).filter(function(t){ return (t.assignee || 'Unassigned') === name; });
+  var sp = tickets.reduce(function(s, t){ return s + (typeof t.sp === 'number' ? t.sp : 0); }, 0);
+  return { count: tickets.length, sp: Math.round(sp * 10) / 10, tickets: tickets };
+}
+
 function renderSprintCloseout(elId) {
   var el = document.getElementById(elId);
   if (!el) return;
-  // Source: closed sprints in FILTERED, most recent first. Cap at 12 to keep
-  // the table scannable; users can refine via filters to see specific ones.
+  var assigneeFilter = (document.getElementById('f-assignee') || {}).value || '';
+  var mode = CLOSEOUT_MODE;
+  var targetStatus = mode === 'active' ? 'active' : 'closed';
+  // Source: matching-status sprints in FILTERED, sorted most-recent first.
   var source = (FILTERED.length ? FILTERED : ALL_SPRINTS_FY26)
-    .filter(function(d){ return d.sprintStatus === 'closed' && d.totalSP > 0; });
+    .filter(function(d){ return d.sprintStatus === targetStatus && d.totalSP > 0; });
   source.sort(function(a, b){
     if (b.fy !== a.fy)        return (b.fy || '').localeCompare(a.fy || '');
     if (b.sprint !== a.sprint) return b.sprint - a.sprint;
     return (a.board || '').localeCompare(b.board || '');
   });
-  var rows = source.slice(0, 12);
+  // Closed view caps at 12 (analytical, scrollable); active shows all (one
+  // active sprint per board, max ~13).
+  var rows = mode === 'active' ? source : source.slice(0, 12);
+
+  // When a person is selected, narrow rows to those that have any ticket
+  // assigned to them — otherwise the table is full of empty buckets.
+  if (assigneeFilter) {
+    rows = rows.filter(function(d){
+      return (d.epicBreakdown || []).some(function(epic){
+        return (epic.tickets || []).some(function(t){ return (t.assignee || 'Unassigned') === assigneeFilter; });
+      });
+    });
+  }
+
   if (!rows.length) {
-    el.innerHTML = '<div class="closeout-wrap"><div class="closeout-empty">No closed sprints in the current filter. Adjust filters or wait for the next sprint to close.</div></div>';
+    var empty = mode === 'active'
+      ? (assigneeFilter
+          ? '<strong>' + escapeHtml(assigneeFilter) + '</strong> has no items in the current active sprints.'
+          : 'No active sprints in the current filter.')
+      : (assigneeFilter
+          ? '<strong>' + escapeHtml(assigneeFilter) + '</strong> has no items in the recent closed sprints.'
+          : 'No closed sprints in the current filter. Adjust filters or wait for the next sprint to close.');
+    el.innerHTML = '<div class="closeout-wrap"><div class="closeout-empty">' + empty + '</div></div>';
     return;
   }
+
+  // Render either active or closed mode
+  if (mode === 'active') return renderActiveTable(el, rows, assigneeFilter);
+  return renderClosedTable(el, rows, assigneeFilter);
+}
+
+function renderClosedTable(el, rows, assigneeFilter) {
   // Roll up totals across the visible rows for the summary strip
-  var tot = { completed: 0, carryover: 0, cancelled: 0, completedSP: 0, carryoverSP: 0, cancelledSP: 0, items: 0 };
+  var tot = { completed: 0, carryover: 0, cancelled: 0, completedSP: 0, carryoverSP: 0, cancelledSP: 0 };
   var classified = rows.map(function(d){
     var c = classifyCloseout(d);
+    if (assigneeFilter) {
+      c = {
+        completed: filterBucketByAssignee(c.completed, assigneeFilter),
+        carryover: filterBucketByAssignee(c.carryover, assigneeFilter),
+        cancelled: filterBucketByAssignee(c.cancelled, assigneeFilter),
+      };
+    }
     tot.completed   += c.completed.count;
     tot.carryover   += c.carryover.count;
     tot.cancelled   += c.cancelled.count;
     tot.completedSP += c.completed.sp;
     tot.carryoverSP += c.carryover.sp;
     tot.cancelledSP += c.cancelled.sp;
-    tot.items       += c.completed.count + c.carryover.count + c.cancelled.count;
     return { row: d, c: c };
   });
   var totSP = tot.completedSP + tot.carryoverSP + tot.cancelledSP;
   var avgCompletion = totSP > 0 ? Math.round(tot.completedSP / totSP * 100) : 0;
   var carryoverPct  = totSP > 0 ? Math.round(tot.carryoverSP / totSP * 100) : 0;
+  var assigneeBadge = assigneeFilter ? '<span class="closeout-assignee-badge">' + escapeHtml(assigneeFilter) + '</span>' : '';
 
   var html = '<div class="closeout-wrap">' +
     '<div class="closeout-summary">' +
+      assigneeBadge +
       '<div class="stat"><strong>' + rows.length + '</strong><span>sprints</span></div>' +
       '<span class="bc-sep">·</span>' +
       '<div class="stat green"><strong>' + tot.completed + '</strong><span>completed (' + Math.round(tot.completedSP * 10) / 10 + ' SP)</span></div>' +
@@ -3496,7 +3636,10 @@ function renderSprintCloseout(elId) {
     var pctK = totalSP > 0 ? Math.round(c.carryover.sp / totalSP * 100) : 0;
     var pctX = totalSP > 0 ? Math.max(0, 100 - pctC - pctK)              : 0;
     var rid = 'co-' + idx;
-    html += '<tr class="closeout-summary-row" id="' + rid + '" onclick="toggleCloseoutDetail(\'' + rid + '\')">' +
+    // Auto-expand when an assignee filter is on so the user lands directly
+    // on their tickets without an extra click.
+    var isOpen = !!assigneeFilter;
+    html += '<tr class="closeout-summary-row' + (isOpen ? ' open' : '') + '" id="' + rid + '" onclick="toggleCloseoutDetail(\'' + rid + '\')">' +
       '<td><span class="closeout-arrow">▶</span></td>' +
       '<td><span class="closeout-board">' + escapeHtml(d.board) + '</span> · <span class="closeout-sprint">' + escapeHtml(d.sprintName) + '</span>' +
         '<div style="font-size:10px;color:var(--muted);margin-top:2px;">' + escapeHtml(d.startDate || '') + ' → ' + escapeHtml(d.endDate || '') + ' · EM: ' + escapeHtml(d.em || '') + '</div>' +
@@ -3512,21 +3655,114 @@ function renderSprintCloseout(elId) {
       '</td>' +
       '<td class="num"><span class="closeout-pct ' + pctBand(pctC) + '">' + pctC + '%</span></td>' +
     '</tr>';
-    // Detail row (hidden by default, expanded via toggle)
-    html += '<tr class="closeout-detail-row hidden" data-parent="' + rid + '">' +
+    var detailHidden = isOpen ? '' : ' hidden';
+    html += '<tr class="closeout-detail-row' + detailHidden + '" data-parent="' + rid + '">' +
       '<td colspan="6"><div class="closeout-detail-inner">' +
-        '<div class="closeout-detail-section">' +
+        (c.carryover.count ? '<div class="closeout-detail-section">' +
           '<div class="closeout-detail-section-title">Carryover <span class="count">' + c.carryover.count + ' items · ' + c.carryover.sp + ' SP</span></div>' +
           renderCloseoutTickets(c.carryover.tickets, 'carryover') +
-        '</div>' +
-        '<div class="closeout-detail-section">' +
+        '</div>' : '') +
+        (c.cancelled.count ? '<div class="closeout-detail-section">' +
           '<div class="closeout-detail-section-title">Cancelled <span class="count">' + c.cancelled.count + ' items · ' + c.cancelled.sp + ' SP</span></div>' +
           renderCloseoutTickets(c.cancelled.tickets, 'cancelled') +
-        '</div>' +
-        '<div class="closeout-detail-section">' +
+        '</div>' : '') +
+        (c.completed.count ? '<div class="closeout-detail-section">' +
           '<div class="closeout-detail-section-title">Completed <span class="count">' + c.completed.count + ' items · ' + c.completed.sp + ' SP</span></div>' +
           renderCloseoutTickets(c.completed.tickets, 'completed') +
-        '</div>' +
+        '</div>' : '') +
+      '</div></td>' +
+    '</tr>';
+  });
+
+  html += '</tbody></table></div>';
+  el.innerHTML = html;
+}
+
+function renderActiveTable(el, rows, assigneeFilter) {
+  var tot = { done: 0, inprog: 0, todo: 0, doneSP: 0, inprogSP: 0, todoSP: 0 };
+  var classified = rows.map(function(d){
+    var c = classifyActive(d);
+    if (assigneeFilter) {
+      c = {
+        done:   filterBucketByAssignee(c.done,   assigneeFilter),
+        inprog: filterBucketByAssignee(c.inprog, assigneeFilter),
+        todo:   filterBucketByAssignee(c.todo,   assigneeFilter),
+      };
+    }
+    tot.done     += c.done.count;
+    tot.inprog   += c.inprog.count;
+    tot.todo     += c.todo.count;
+    tot.doneSP   += c.done.sp;
+    tot.inprogSP += c.inprog.sp;
+    tot.todoSP   += c.todo.sp;
+    return { row: d, c: c };
+  });
+  var totSP = tot.doneSP + tot.inprogSP + tot.todoSP;
+  var pctDone = totSP > 0 ? Math.round(tot.doneSP / totSP * 100) : 0;
+  var assigneeBadge = assigneeFilter ? '<span class="closeout-assignee-badge">' + escapeHtml(assigneeFilter) + '</span>' : '';
+
+  var html = '<div class="closeout-wrap">' +
+    '<div class="closeout-summary">' +
+      assigneeBadge +
+      '<div class="stat"><strong>' + rows.length + '</strong><span>active sprints</span></div>' +
+      '<span class="bc-sep">·</span>' +
+      '<div class="stat green"><strong>' + tot.done + '</strong><span>done (' + Math.round(tot.doneSP * 10) / 10 + ' SP)</span></div>' +
+      '<div class="stat blue"><strong>' + tot.inprog + '</strong><span>in progress (' + Math.round(tot.inprogSP * 10) / 10 + ' SP)</span></div>' +
+      '<div class="stat"><strong style="color:var(--muted)">' + tot.todo + '</strong><span>to do (' + Math.round(tot.todoSP * 10) / 10 + ' SP)</span></div>' +
+      '<span class="bc-sep">·</span>' +
+      '<div class="stat"><span>avg progress</span><strong>' + pctDone + '%</strong></div>' +
+    '</div>' +
+    '<table class="closeout-table">' +
+      '<thead><tr>' +
+        '<th style="width:24px;"></th>' +
+        '<th>Board · Sprint</th>' +
+        '<th class="num">Items</th>' +
+        '<th class="num">SP</th>' +
+        '<th>Distribution</th>' +
+        '<th class="num">% Done</th>' +
+      '</tr></thead><tbody>';
+
+  classified.forEach(function(entry, idx){
+    var d = entry.row;
+    var c = entry.c;
+    var totalCount = c.done.count + c.inprog.count + c.todo.count;
+    var totalSP    = c.done.sp    + c.inprog.sp    + c.todo.sp;
+    var pctD = totalSP > 0 ? Math.round(c.done.sp   / totalSP * 100) : 0;
+    var pctI = totalSP > 0 ? Math.round(c.inprog.sp / totalSP * 100) : 0;
+    var pctT = totalSP > 0 ? Math.max(0, 100 - pctD - pctI)            : 0;
+    var rid = 'co-active-' + idx;
+    var isOpen = !!assigneeFilter;
+    html += '<tr class="closeout-summary-row' + (isOpen ? ' open' : '') + '" id="' + rid + '" onclick="toggleCloseoutDetail(\'' + rid + '\')">' +
+      '<td><span class="closeout-arrow">▶</span></td>' +
+      '<td><span class="closeout-board">' + escapeHtml(d.board) + '</span> · <span class="closeout-sprint">' + escapeHtml(d.sprintName) + '</span>' +
+        '<div style="font-size:10px;color:var(--muted);margin-top:2px;">' + escapeHtml(d.startDate || '') + ' → ' + escapeHtml(d.endDate || '') + ' · EM: ' + escapeHtml(d.em || '') + '</div>' +
+      '</td>' +
+      '<td class="num">' + totalCount + '</td>' +
+      '<td class="num">' + (Math.round(totalSP * 10) / 10) + '</td>' +
+      '<td><div class="closeout-bar" title="Done ' + pctD + '% · In Progress ' + pctI + '% · To Do ' + pctT + '%">' +
+        '<span class="seg-completed" style="width:' + pctD + '%"></span>' +
+        '<span class="seg-inprogress" style="width:' + pctI + '%"></span>' +
+        '<span class="seg-todo" style="width:' + pctT + '%"></span>' +
+      '</div>' +
+      '<div style="font-size:10px;color:var(--muted);margin-top:4px;">' + c.done.count + ' done · ' + c.inprog.count + ' in prog · ' + c.todo.count + ' to do</div>' +
+      '</td>' +
+      '<td class="num"><span class="closeout-pct ' + pctBand(pctD) + '">' + pctD + '%</span></td>' +
+    '</tr>';
+    var detailHidden = isOpen ? '' : ' hidden';
+    html += '<tr class="closeout-detail-row' + detailHidden + '" data-parent="' + rid + '">' +
+      '<td colspan="6"><div class="closeout-detail-inner">' +
+        (c.inprog.count ? '<div class="closeout-detail-section">' +
+          '<div class="closeout-detail-section-title">In Progress <span class="count">' + c.inprog.count + ' items · ' + c.inprog.sp + ' SP</span></div>' +
+          renderCloseoutTickets(c.inprog.tickets, 'inprog') +
+        '</div>' : '') +
+        (c.todo.count ? '<div class="closeout-detail-section">' +
+          '<div class="closeout-detail-section-title">To Do <span class="count">' + c.todo.count + ' items · ' + c.todo.sp + ' SP</span></div>' +
+          renderCloseoutTickets(c.todo.tickets, 'todo') +
+        '</div>' : '') +
+        (c.done.count ? '<div class="closeout-detail-section">' +
+          '<div class="closeout-detail-section-title">Done <span class="count">' + c.done.count + ' items · ' + c.done.sp + ' SP</span></div>' +
+          renderCloseoutTickets(c.done.tickets, 'completed') +
+        '</div>' : '') +
       '</div></td>' +
     '</tr>';
   });
