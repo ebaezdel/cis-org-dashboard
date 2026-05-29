@@ -2480,12 +2480,10 @@ function renderSHDKPI() {
     : FILTERED.filter(function(d){ return d.sprintStatus === 'active'; });
   if (!source.length) source = ACTIVE_SPRINTS.filter(function(d){ return d.sprintStatus === 'active'; });
 
-  // Bucket every ticket across the source rows by To Do / In Progress / Done.
-  // For closed sprints we treat Cancelled tickets as part of "done" for the
-  // purposes of the headline SP totals — the work is closed either way.
-  // assigneeF, when present, narrows the buckets to that person only.
-  var IN_PROG_RE = /(in.?progress|test.?complete|dev.?(?:elopment.?)?complete|in.?review|pending.?approval|review|blocked)/i;
-  var DONE_RE    = /^(accepted|done|complete[d]?|resolved|closed|cancelled|canceled|won.?t.?do)$/i;
+  // Bucket every ticket across the source rows by To Do / In Progress / Done
+  // using the canonical statusCategory() (single source of truth — see
+  // STATUS_CATEGORY_MAP near escapeHtml). assigneeF, when present, narrows
+  // the buckets to that person only.
   var todoSP = 0, inprogSP = 0, doneSP = 0;
   var todoCount = 0, inprogCount = 0, doneCount = 0;
   source.forEach(function(d){
@@ -2493,10 +2491,10 @@ function renderSHDKPI() {
       (epic.tickets || []).forEach(function(t){
         if (assigneeF && (t.assignee || 'Unassigned') !== assigneeF) return;
         var sp = (typeof t.sp === 'number') ? t.sp : 0;
-        var s  = t.status || '';
-        if      (DONE_RE.test(s))    { doneSP   += sp; doneCount++;   }
-        else if (IN_PROG_RE.test(s)) { inprogSP += sp; inprogCount++; }
-        else                         { todoSP   += sp; todoCount++;   }
+        var cat = statusCategory(t.status);
+        if      (cat === 'done')   { doneSP   += sp; doneCount++;   }
+        else if (cat === 'inprog') { inprogSP += sp; inprogCount++; }
+        else                       { todoSP   += sp; todoCount++;   }
       });
     });
   });
@@ -3414,14 +3412,11 @@ function renderSHDTable() {
               '<td colspan="3"><span>Assignee</span></td>' +
             '</tr>';
             // Ticket rows per epic. Map every status to one of three Jira
-            // categories: To Do (gray) / In Progress (blue) / Done (green).
-            // Cancelled rolls into Done — the work is closed either way.
+            // categories via the canonical statusCategory(). Same buckets
+            // as the chips/closeout/KPI so colors stay in lockstep.
             visibleTickets.forEach(function(t, ti) {
-              var s = String(t.status || '').toLowerCase().trim();
-              var sc;
-              if (/(^|\b)(accepted|acceptance|done|cancel(led|ed)?|won.?t.?do|closed|resolved|complete[d]?)(\b|$)/.test(s)) sc = 'ts-done';
-              else if (/(in.?progress|test.?complete|dev.?(?:elopment.?)?complete|in.?review|pending.?approval|review|blocked)/.test(s)) sc = 'ts-inprogress';
-              else sc = 'ts-todo';
+              var cat = statusCategory(t.status);
+              var sc = cat === 'done' ? 'ts-done' : cat === 'inprog' ? 'ts-inprogress' : 'ts-todo';
               var statusLabel = t.status || 'To Do';
               var itype = (t.issueType || 'Story').toLowerCase().replace(/[^a-z]/g,'');
               var itypeClass = itype === 'story' ? 'itype-story'
@@ -3485,8 +3480,6 @@ function renderSHDTable() {
 //   cancelled  — work that was abandoned (Cancelled / Won't Do)
 // Returns counts + SP totals + the actual ticket arrays for drill-down.
 function classifyCloseout(row) {
-  var COMPLETED_RE = /^(accepted|done|complete[d]?|resolved|closed)$/i;
-  var CANCELLED_RE = /^(cancelled|canceled|won.?t.?do)$/i;
   var out = {
     completed: { count: 0, sp: 0, tickets: [] },
     carryover: { count: 0, sp: 0, tickets: [] },
@@ -3494,10 +3487,15 @@ function classifyCloseout(row) {
   };
   (row.epicBreakdown || []).forEach(function(epic){
     (epic.tickets || []).forEach(function(t){
+      // Cancelled gets its own bucket (separate from completed/Done) so the
+      // closed-sprint distribution surfaces abandoned scope distinctly.
+      // Everything else routes through statusCategory() so a "Done" status
+      // is always Done and an "In Progress" / "Pending Approval" is always
+      // carryover — no regex drift across classifiers.
       var bucket;
-      if      (COMPLETED_RE.test(t.status || '')) bucket = 'completed';
-      else if (CANCELLED_RE.test(t.status || '')) bucket = 'cancelled';
-      else                                        bucket = 'carryover';
+      if      (isCancelledStatus(t.status))            bucket = 'cancelled';
+      else if (statusCategory(t.status) === 'done')    bucket = 'completed';
+      else                                             bucket = 'carryover';
       var sp = (typeof t.sp === 'number') ? t.sp : 0;
       out[bucket].count += 1;
       out[bucket].sp    += sp;
@@ -3564,7 +3562,7 @@ function renderCloseoutTickets(tickets, bucket) {
     var statusClass = statusBadgeClass(t.status);
     var iconCls     = ticketIconClass(t.issueType);
     var iconHTML    = ticketIconHTML(t.issueType);
-    var keyClass    = 'atr-key' + (/cancel/i.test(t.status) ? ' cancelled' : '');
+    var keyClass    = 'atr-key' + (isCancelledStatus(t.status) ? ' cancelled' : '');
     var spStr       = t.sp == null ? '–' : t.sp;
     var browseUrl   = 'https://moveinc.atlassian.net/browse/' + encodeURIComponent(t.key);
     var assignee    = t.assignee || 'Unassigned';
@@ -3620,8 +3618,6 @@ function setCloseoutMode(mode) {
 // status category convention). All tickets in every status appear so
 // the table reflects the full sprint scope.
 function classifyActive(row) {
-  var IN_PROG_RE = /(in.?progress|test.?complete|dev.?(?:elopment.?)?complete|in.?review|pending.?approval|review|blocked)/i;
-  var DONE_RE    = /^(accepted|done|complete[d]?|resolved|closed|cancel(led|ed)?|won.?t.?do)$/i;
   var out = {
     done:   { count: 0, sp: 0, tickets: [] },
     inprog: { count: 0, sp: 0, tickets: [] },
@@ -3629,10 +3625,7 @@ function classifyActive(row) {
   };
   (row.epicBreakdown || []).forEach(function(epic){
     (epic.tickets || []).forEach(function(t){
-      var bucket;
-      if      (DONE_RE.test(t.status || ''))    bucket = 'done';
-      else if (IN_PROG_RE.test(t.status || '')) bucket = 'inprog';
-      else                                      bucket = 'todo';
+      var bucket = statusCategory(t.status); // 'todo' | 'inprog' | 'done'
       var sp = (typeof t.sp === 'number') ? t.sp : 0;
       out[bucket].count += 1;
       out[bucket].sp    += sp;
@@ -3942,6 +3935,66 @@ function escapeHtml(s) {
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
+
+// ─── Canonical Jira status → category mapping (SINGLE SOURCE OF TRUTH) ───
+// Mirrors the official RDC Jira workflow:
+//
+//   To Do (gray)    : Ready to Start · Pending Approval
+//   In Progress (b) : In Progress · Development Complete · Test Complete · Blocked
+//   Done (green)    : Accepted · Cancelled
+//
+// Every classifier (KPI buckets, board chips, closeout table, status pill
+// CSS class, ticket-modal grouping) MUST go through statusCategory() so a
+// new status only needs to be added in one place. Aliases catch synonyms
+// from older snapshots ("Done" → Accepted, "To Do" → Ready to Start, etc.).
+var STATUS_CATEGORY_MAP = {
+  // To Do
+  'ready to start':    'todo',
+  'to do':             'todo',
+  'todo':              'todo',
+  'open':              'todo',
+  'backlog':           'todo',
+  'pending approval':  'todo',
+  'pending':           'todo',
+  // In Progress
+  'in progress':       'inprog',
+  'in review':         'inprog',
+  'review':            'inprog',
+  'development complete': 'inprog',
+  'dev complete':      'inprog',
+  'test complete':     'inprog',
+  'qa':                'inprog',
+  'blocked':           'inprog',
+  // Done
+  'accepted':          'done',
+  'acceptance':        'done',
+  'done':              'done',
+  'completed':         'done',
+  'complete':          'done',
+  'resolved':          'done',
+  'closed':            'done',
+  'cancelled':         'done',
+  'canceled':          'done',
+  "won't do":          'done',
+  'wont do':           'done',
+};
+function statusCategory(status) {
+  var k = String(status || '').toLowerCase().trim();
+  if (!k) return 'todo';
+  return STATUS_CATEGORY_MAP[k] || 'todo';
+}
+// CSS-class form (ats-todo / ats-inprogress / ats-done) used by status pills.
+function statusBadgeClass(status) {
+  var c = statusCategory(status);
+  return c === 'done' ? 'ats-done' : c === 'inprog' ? 'ats-inprogress' : 'ats-todo';
+}
+// True iff the status is a Cancelled-family status (used in carryover/cancelled
+// distinction on the closed-sprint closeout table, where Cancelled gets its own
+// bucket separate from the green "Done" bucket of completed work).
+function isCancelledStatus(status) {
+  var k = String(status || '').toLowerCase().trim();
+  return k === 'cancelled' || k === 'canceled' || k === "won't do" || k === 'wont do';
+}
 // Render an assignee avatar. When a Jira avatarUrl is provided, use the
 // real image; on load failure, JS swaps in the initials fallback. The
 // outer span keeps the colored background so missing photos still look
@@ -4170,19 +4223,11 @@ function ticketIconHTML(issueType) {
   var t = String(issueType || '').toLowerCase();
   return TICKET_ICON_SVG[t] || ('<span style="font-size:9px;font-weight:700;">' + (String(issueType || '?').charAt(0).toUpperCase()) + '</span>');
 }
-// Map any specific Jira status to one of three Jira "status categories":
-// To Do (gray), In Progress (blue), Done (green). Cancelled rolls into Done
-// because the ticket is closed — same convention Jira itself uses.
-function statusBadgeClass(status) {
-  var s = String(status || '').toLowerCase().trim();
-  // Done category — anything finished (work or won't-do)
-  if (/(^|\s)(accepted|acceptance|done|cancel(led|ed)?|won.?t.?do|closed|resolved|complete[d]?)(\s|$)/.test(s)
-      || /^accepted$/.test(s) || /^done$/.test(s) || /^cancelled$/.test(s)) return 'ats-done';
-  // In Progress category — anything actively moving
-  if (/(in.?progress|test.?complete|dev.?(?:elopment.?)?complete|in.?review|pending.?approval|review|blocked)/.test(s)) return 'ats-inprogress';
-  // To Do category — not started yet (default fallback too)
-  return 'ats-todo';
-}
+// statusBadgeClass / statusCategory live next to escapeHtml below — see
+// STATUS_CATEGORY_MAP for the canonical mapping. Keeping declarations in
+// one place avoids the previous bug where each classifier hand-rolled a
+// regex and they drifted (Pending Approval used to land in In Progress
+// because four separate regexes all included it).
 
 // Pull every ticket assigned to `dev` across the rows the card represents.
 // Returns array of {key,title,status,sp,issueType,epic} sorted by SP desc.
@@ -4253,7 +4298,7 @@ function renderAssigneeTickets(tickets) {
     var statusClass = statusBadgeClass(t.status);
     var iconCls     = ticketIconClass(t.issueType);
     var iconHTML    = ticketIconHTML(t.issueType);
-    var keyClass    = 'atr-key' + (/cancel/i.test(t.status) ? ' cancelled' : '');
+    var keyClass    = 'atr-key' + (isCancelledStatus(t.status) ? ' cancelled' : '');
     var spStr       = t.sp == null ? '–' : t.sp;
     var browseUrl   = 'https://moveinc.atlassian.net/browse/' + encodeURIComponent(t.key);
     return '<a class="assignee-ticket-row" href="' + browseUrl + '" target="_blank" rel="noopener">' +
@@ -4293,18 +4338,11 @@ var BUCKET_LABELS = { todo: 'To Do', inprog: 'In Progress', done: 'Done' };
 // Walk a list of sprint rows and pull every ticket whose status maps to
 // `bucket`. Returns flat array of {…ticket, sprintName, board, epicLabel}.
 function ticketsForBucket(rows, bucket, assigneeFilter) {
-  var IN_PROG_RE = /(in.?progress|test.?complete|dev.?(?:elopment.?)?complete|in.?review|pending.?approval|review|blocked)/i;
-  var DONE_RE    = /^(accepted|done|complete[d]?|resolved|closed|cancelled|canceled|won.?t.?do)$/i;
-  var classifyOne = function(status){
-    if (DONE_RE.test(status))    return 'done';
-    if (IN_PROG_RE.test(status)) return 'inprog';
-    return 'todo';
-  };
   var out = [];
   (rows || []).forEach(function(d){
     (d.epicBreakdown || []).forEach(function(epic){
       (epic.tickets || []).forEach(function(t){
-        if (classifyOne(t.status || '') !== bucket) return;
+        if (statusCategory(t.status) !== bucket) return;
         if (assigneeFilter && (t.assignee || 'Unassigned') !== assigneeFilter) return;
         out.push(Object.assign({}, t, {
           sprintName: d.sprintName,
@@ -4392,7 +4430,7 @@ function openBucketModal(opts) {
       var statusClass = statusBadgeClass(t.status);
       var iconCls     = ticketIconClass(t.issueType);
       var iconHTML    = ticketIconHTML(t.issueType);
-      var keyClass    = 'atr-key' + (/cancel/i.test(t.status) ? ' cancelled' : '');
+      var keyClass    = 'atr-key' + (isCancelledStatus(t.status) ? ' cancelled' : '');
       var spStr       = t.sp == null ? '–' : t.sp;
       var browseUrl   = 'https://moveinc.atlassian.net/browse/' + encodeURIComponent(t.key);
       var assignee    = t.assignee || 'Unassigned';
@@ -4426,36 +4464,21 @@ function closeBucketModal(e) {
   if (modal) modal.classList.remove('open');
 }
 
-// Bucket every ticket across one or more sprint rows into the three Jira-style
-// buckets shown in its sprint header (To Do / In Progress / Done).
-// Walks epicBreakdown[].tickets[].status; same alias map as aggregateTickets()
-// inside renderBoardHealthGrid so the chips and the type breakdown agree.
-var WORKLOAD_STATUS_ALIAS = {
-  'Dev Complete': 'Development Complete',
-  'Done':         'Accepted',
-  'To Do':        'Ready to Start',
-  'Acceptance':   'Accepted',
-  'Cancelled':    'Accepted',
-  'Canceled':     'Accepted',
-  "Won't Do":     'Accepted',
-};
-// Bucket sprint tickets by status into Todo / In Progress / Done.
-// Returns SP totals per bucket (the headline number on the chip — matches
-// Jira's own chip semantics) plus item counts (used as tooltips/sublines).
-// Cancelled tickets roll into Done bucket (work is closed).
+// Bucket sprint tickets into the three Jira "status categories" shown in
+// the sprint header: To Do / In Progress / Done. Routes through the
+// canonical statusCategory() so chips, KPI, and the closeout table all
+// classify the same way (e.g. Pending Approval is To Do everywhere).
 function bucketStatusFromRows(rows) {
-  var DONE_KEYS    = { 'Accepted': 1 };
-  var IN_PROG_KEYS = { 'In Progress': 1, 'Test Complete': 1, 'Development Complete': 1, 'Pending Approval': 1 };
   var done = 0, inprog = 0, todo = 0;       // SP totals
   var doneN = 0, inprogN = 0, todoN = 0;    // ticket counts
   (rows || []).forEach(function(d){
     (d.epicBreakdown || []).forEach(function(epic){
       (epic.tickets || []).forEach(function(t){
-        var s  = WORKLOAD_STATUS_ALIAS[t.status] || t.status || 'Unknown';
         var sp = (typeof t.sp === 'number') ? t.sp : 0;
-        if      (DONE_KEYS[s])    { done   += sp; doneN++;   }
-        else if (IN_PROG_KEYS[s]) { inprog += sp; inprogN++; }
-        else                      { todo   += sp; todoN++;   }
+        var cat = statusCategory(t.status);
+        if      (cat === 'done')   { done   += sp; doneN++;   }
+        else if (cat === 'inprog') { inprog += sp; inprogN++; }
+        else                       { todo   += sp; todoN++;   }
       });
     });
   });
