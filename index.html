@@ -3552,14 +3552,13 @@ function setCloseoutMode(mode) {
   renderSprintCloseout('sprint-closeout');
 }
 
-// Reuse classifyCloseout for both modes. For active sprints we want
-// To Do / In Progress / Done buckets (no Cancelled, since work hasn't
-// concluded). The classifyer already handles Cancelled separately;
-// we just split carryover into todo+inprog when needed.
+// For active sprints we want To Do / In Progress / Done buckets.
+// Cancelled tickets roll into Done — work is closed (matching Jira's
+// status category convention). All tickets in every status appear so
+// the table reflects the full sprint scope.
 function classifyActive(row) {
   var IN_PROG_RE = /(in.?progress|test.?complete|dev.?(?:elopment.?)?complete|in.?review|pending.?approval|review|blocked)/i;
-  var DONE_RE    = /^(accepted|done|complete[d]?|resolved|closed)$/i;
-  var CANCELLED  = /^(cancelled|canceled|won.?t.?do)$/i;
+  var DONE_RE    = /^(accepted|done|complete[d]?|resolved|closed|cancel(led|ed)?|won.?t.?do)$/i;
   var out = {
     done:   { count: 0, sp: 0, tickets: [] },
     inprog: { count: 0, sp: 0, tickets: [] },
@@ -3567,7 +3566,6 @@ function classifyActive(row) {
   };
   (row.epicBreakdown || []).forEach(function(epic){
     (epic.tickets || []).forEach(function(t){
-      if (CANCELLED.test(t.status || '')) return; // skip cancelled in active view
       var bucket;
       if      (DONE_RE.test(t.status || ''))    bucket = 'done';
       else if (IN_PROG_RE.test(t.status || '')) bucket = 'inprog';
@@ -4370,10 +4368,14 @@ var WORKLOAD_STATUS_ALIAS = {
   'Done':         'Accepted',
   'To Do':        'Ready to Start',
   'Acceptance':   'Accepted',
+  'Cancelled':    'Accepted',
+  'Canceled':     'Accepted',
+  "Won't Do":     'Accepted',
 };
 // Bucket sprint tickets by status into Todo / In Progress / Done.
 // Returns SP totals per bucket (the headline number on the chip — matches
 // Jira's own chip semantics) plus item counts (used as tooltips/sublines).
+// Cancelled tickets roll into Done bucket (work is closed).
 function bucketStatusFromRows(rows) {
   var DONE_KEYS    = { 'Accepted': 1 };
   var IN_PROG_KEYS = { 'In Progress': 1, 'Test Complete': 1, 'Development Complete': 1, 'Pending Approval': 1 };
