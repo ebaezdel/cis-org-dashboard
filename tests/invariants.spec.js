@@ -18,8 +18,8 @@ test.describe('Dashboard data invariants', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto(PAGE, { waitUntil: 'load' });
     await page.waitForFunction(() => {
-      const tbody = document.querySelector('#shd-tbody');
-      return tbody && tbody.children.length > 0;
+      const grid = document.querySelector('#board-health-grid');
+      return grid && grid.children.length > 0;
     }, { timeout: 25_000 });
   });
 

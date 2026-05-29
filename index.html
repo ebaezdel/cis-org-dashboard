@@ -820,26 +820,6 @@ tr.ticket-col-hdr.hidden{display:none;}
   <div class="board-grid" id="board-health-grid"></div>
   <div class="section-heading">Sprint Closeout — Carryover Analysis</div>
   <div id="sprint-closeout"></div>
-  <div class="section-heading">Sprint Data Table</div>
-  <div class="table-wrap">
-    <table>
-      <thead>
-        <tr>
-          <th style="width:22px;"></th>
-          <th class="left">EM</th>
-          <th class="left">Board</th>
-          <th class="left">Sprint</th>
-          <th class="left">Dates</th>
-          <th>Status</th>
-          <th>Items</th>
-          <th>Committed</th>
-          <th>Done</th>
-          <th>SP Res%</th>
-        </tr>
-      </thead>
-      <tbody id="shd-tbody"></tbody>
-    </table>
-  </div>
 </div>
 
 <!-- ═══ DHD ═══════════════════════════════════════════════════════════════════ -->
@@ -2393,7 +2373,6 @@ function renderSHD() {
   renderSHDKPI();
   renderBoardHealthGrid('board-health-grid');
   renderSprintCloseout('sprint-closeout');
-  renderSHDTable();
 }
 
 function renderSHDKPI() {

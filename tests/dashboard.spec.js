@@ -7,10 +7,10 @@ test.describe('CIS Org Health Dashboard', () => {
 
   test.beforeEach(async ({ page }) => {
     await page.goto(PAGE, { waitUntil: 'load' });
-    // Wait until JS has rendered at least one sprint row in the table
+    // Wait until JS has rendered the board health grid (the primary view)
     await page.waitForFunction(() => {
-      const tbody = document.querySelector('#shd-tbody');
-      return tbody && tbody.children.length > 0;
+      const grid = document.querySelector('#board-health-grid');
+      return grid && grid.children.length > 0;
     }, { timeout: 25_000 });
   });
 
@@ -29,8 +29,8 @@ test.describe('CIS Org Health Dashboard', () => {
     page.on('pageerror', e => errors.push(e.message));
     await page.reload({ waitUntil: 'load' });
     await page.waitForFunction(() => {
-      const tbody = document.querySelector('#shd-tbody');
-      return tbody && tbody.children.length > 0;
+      const grid = document.querySelector('#board-health-grid');
+      return grid && grid.children.length > 0;
     }, { timeout: 25_000 });
     expect(errors, 'JS errors:\n' + errors.join('\n')).toHaveLength(0);
   });
@@ -51,11 +51,12 @@ test.describe('CIS Org Health Dashboard', () => {
 
   // ─── Tabs ─────────────────────────────────────────────────────────────────────
 
-  test('Sprints tab renders data table rows', async ({ page }) => {
-    const rows = page.locator('#shd-tbody tr');
-    await expect(rows.first()).toBeVisible();
-    const count = await rows.count();
-    expect(count).toBeGreaterThan(5);
+  test('Sprints tab renders the board health grid and closeout section', async ({ page }) => {
+    const cards = page.locator('#board-health-grid .board-card');
+    await expect(cards.first()).toBeVisible();
+    expect(await cards.count()).toBeGreaterThanOrEqual(5);
+    const closeoutRows = page.locator('#sprint-closeout tr.closeout-summary-row');
+    expect(await closeoutRows.count()).toBeGreaterThan(0);
   });
 
   test('Delivery tab becomes active and renders content', async ({ page }) => {
@@ -91,8 +92,9 @@ test.describe('CIS Org Health Dashboard', () => {
 
   // ─── Filters ──────────────────────────────────────────────────────────────────
 
-  test('board filter narrows sprint table rows', async ({ page }) => {
-    const allRows = await page.locator('#shd-tbody tr').count();
+  test('board filter narrows the board health grid to one card', async ({ page }) => {
+    const allCards = await page.locator('#board-health-grid .board-card').count();
+    expect(allCards).toBeGreaterThan(1);
 
     const boardSel = page.locator('#f-board');
     const options = await boardSel.locator('option').allInnerTexts();
@@ -102,29 +104,21 @@ test.describe('CIS Org Health Dashboard', () => {
     await boardSel.selectOption({ label: firstBoard });
     await page.waitForTimeout(400);
 
-    const filteredRows = await page.locator('#shd-tbody tr').count();
-    expect(filteredRows).toBeLessThan(allRows);
-    expect(filteredRows).toBeGreaterThan(0);
+    const filteredCards = await page.locator('#board-health-grid .board-card').count();
+    expect(filteredCards).toBeLessThan(allCards);
+    expect(filteredCards).toBeGreaterThan(0);
   });
 
-  test('clear filters resets status filter and shows more rows', async ({ page }) => {
-    // Filter to only active sprints (clearAllFilters resets f-status)
+  test('clear filters resets status filter back to empty', async ({ page }) => {
     const statusSel = page.locator('#f-status');
     await statusSel.selectOption('active');
     await page.waitForTimeout(400);
+    expect(await statusSel.inputValue()).toBe('active');
 
-    const filteredRows = await page.locator('#shd-tbody tr').count();
-
-    // Clear
     await page.locator('#btn-clear-filters').click();
     await page.waitForTimeout(400);
 
-    // Status select back to empty and more rows visible
-    const statusVal = await statusSel.inputValue();
-    expect(statusVal).toBe('');
-
-    const restoredRows = await page.locator('#shd-tbody tr').count();
-    expect(restoredRows).toBeGreaterThan(filteredRows);
+    expect(await statusSel.inputValue()).toBe('');
   });
 
   // ─── Per-assignee tickets modal (capacity widget) ─────────────────────────────
