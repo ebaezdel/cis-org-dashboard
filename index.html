@@ -1972,7 +1972,19 @@ function computeBannerBuffer() {
 // Each filter only shows values that exist in ALL_DATA rows matching all OTHER
 // currently-selected filters.
 
+// Case-insensitive substring match for assignee names. Typing "narendra"
+// matches "Narendra Kumar" etc. When the user picks from the dropdown the
+// full name is also a substring of itself, so both UX paths work.
+function assigneeMatches(name, filter) {
+  if (!filter) return true;
+  return String(name == null ? 'Unassigned' : name).toLowerCase().indexOf(String(filter).toLowerCase().trim()) !== -1;
+}
+
 function getFilterState() {
+  // Prefer the typed input over the hidden select so live-filter works.
+  var selVal   = (document.getElementById('f-assignee') || {}).value || '';
+  var inputVal = (document.getElementById('assignee-combo-input') || {}).value || '';
+  var assignee = selVal || inputVal.trim();
   return {
     status:  document.getElementById('f-status').value,
     fy:      document.getElementById('f-fy').value,
@@ -1980,7 +1992,7 @@ function getFilterState() {
     sprint:  document.getElementById('f-sprint').value,
     em:      document.getElementById('f-em').value,
     board:    document.getElementById('f-board').value,
-    assignee: (document.getElementById('f-assignee') || {}).value || '',
+    assignee: assignee,
   };
 }
 
@@ -1994,7 +2006,7 @@ function matchExcept(state, except) {
     if (except.indexOf('em')     === -1 && state.em     && d.em           !== state.em)     return false;
     if (except.indexOf('board')    === -1 && state.board    && d.board !== state.board) return false;
     if (except.indexOf('assignee') === -1 && state.assignee &&
-        !(d.ticketsPerDev || []).some(function(t){ return t.dev === state.assignee; })) return false;
+        !(d.ticketsPerDev || []).some(function(t){ return assigneeMatches(t.dev, state.assignee); })) return false;
     return true;
   });
 }
@@ -2181,8 +2193,10 @@ function updateAssigneeCombo(names, selectedName) {
   var input = document.getElementById('assignee-combo-input');
   var combo = document.getElementById('assignee-combo');
   if (!input || !combo) return;
-  input.value = selectedName || '';
-  combo.classList.toggle('has-value', !!selectedName);
+  // Only overwrite input when a dropdown selection was explicitly made —
+  // otherwise we'd clobber the user's live-typed substring mid-keystroke.
+  if (selectedName) input.value = selectedName;
+  combo.classList.toggle('has-value', !!(input.value && input.value.trim()));
   renderAssigneeComboOptions(input.value);
 }
 
@@ -2218,17 +2232,24 @@ function openAssigneeCombo() {
 }
 function closeAssigneeCombo() {
   var combo = document.getElementById('assignee-combo');
-  var input = document.getElementById('assignee-combo-input');
-  var sel = document.getElementById('f-assignee');
   if (combo) combo.classList.remove('open');
-  // If the user typed something but didn't pick, restore the actual selected value
-  if (input && sel) input.value = sel.value || '';
+  // Keep typed text in the input — live-filter is using it. User clicks × to clear.
 }
 
+var _assigneeDebounce = null;
 function onAssigneeComboInput() {
   openAssigneeCombo();
   var input = document.getElementById('assignee-combo-input');
   renderAssigneeComboOptions(input.value);
+  // Clear the hidden select so getFilterState() reads from the typed input
+  var sel = document.getElementById('f-assignee');
+  if (sel) sel.value = '';
+  // Show/hide the × clear button based on typed text
+  var combo = document.getElementById('assignee-combo');
+  if (combo) combo.classList.toggle('has-value', !!(input.value && input.value.trim()));
+  // Live-filter the entire page as the user types (debounced 200ms)
+  if (_assigneeDebounce) clearTimeout(_assigneeDebounce);
+  _assigneeDebounce = setTimeout(function() { applyFilters(); }, 200);
 }
 
 function onAssigneeComboKey(e) {
@@ -2242,7 +2263,11 @@ function onAssigneeComboKey(e) {
 
 function clearAssigneeFilter() {
   var sel = document.getElementById('f-assignee');
+  var input = document.getElementById('assignee-combo-input');
   if (sel) sel.value = '';
+  if (input) input.value = '';
+  var combo = document.getElementById('assignee-combo');
+  if (combo) combo.classList.remove('has-value');
   closeAssigneeCombo();
   onAssigneeChange();
 }
@@ -2337,7 +2362,7 @@ function applyFilters() {
   var em        = document.getElementById('f-em').value;
   var board     = document.getElementById('f-board').value;
   var status    = document.getElementById('f-status').value;
-  var assignee  = (document.getElementById('f-assignee') || {}).value || '';
+  var assignee  = getFilterState().assignee;
   FILTERED = ALL_DATA.filter(function(d){
     if (fy       && d.fy           !== fy)     return false;
     if (q        && d.quarter      !== q)      return false;
@@ -2473,7 +2498,7 @@ function renderSHDKPI() {
   var sprintF = document.getElementById('f-sprint') ? document.getElementById('f-sprint').value : '';
   var qF      = document.getElementById('f-q')      ? document.getElementById('f-q').value      : '';
   var statusF = document.getElementById('f-status') ? document.getElementById('f-status').value  : '';
-  var assigneeF = (document.getElementById('f-assignee') || {}).value || '';
+  var assigneeF = getFilterState().assignee;
   var hasHistoricFilter = sprintF || qF || statusF !== 'active';
   var source = hasHistoricFilter
     ? FILTERED
@@ -2489,7 +2514,7 @@ function renderSHDKPI() {
   source.forEach(function(d){
     (d.epicBreakdown || []).forEach(function(epic){
       (epic.tickets || []).forEach(function(t){
-        if (assigneeF && (t.assignee || 'Unassigned') !== assigneeF) return;
+        if (assigneeF && !assigneeMatches(t.assignee, assigneeF)) return;
         var sp = (typeof t.sp === 'number') ? t.sp : 0;
         var cat = statusCategory(t.status);
         if      (cat === 'done')   { doneSP   += sp; doneCount++;   }
@@ -2562,7 +2587,7 @@ function renderBoardHealthGrid(containerId) {
   // filter, respect FILTERED even if it ends up empty — falling back to all
   // active sprints would silently undo their selection.
   var anyFilter = !!(sprintF || qF || statusF || periodF ||
-    (document.getElementById('f-assignee') || {}).value ||
+    getFilterState().assignee ||
     (document.getElementById('f-em') || {}).value ||
     (document.getElementById('f-board') || {}).value);
   var source = anyFilter ? FILTERED : (FILTERED.length ? FILTERED : ACTIVE_SPRINTS);
@@ -2608,7 +2633,7 @@ function renderBoardHealthGrid(containerId) {
   // When filtering by active, show stub cards for boards with no active sprint
   // — but skip stubs entirely when an assignee filter is on (the user wants a
   // focused view of just where their person is working).
-  var assigneeF = (document.getElementById('f-assignee') || {}).value || '';
+  var assigneeF = getFilterState().assignee;
   if (statusF === 'active' && !assigneeF) {
     var allBoards = ALL_DATA.reduce(function(acc, d) {
       if (acc.indexOf(d.board) === -1) acc.push(d.board);
@@ -3029,7 +3054,7 @@ function renderVelocityChart(canvasId) {
   if (ctx) ctx.style.display = '';
 
   // Aggregate epicBreakdown across all visible sprint rows
-  var assigneeF = (document.getElementById('f-assignee') || {}).value || '';
+  var assigneeF = getFilterState().assignee;
   var epicMap = {};  // epicKey → {key, label, issues, sp, done}
   var hasData = false;
   source.forEach(function(r) {
@@ -3037,7 +3062,7 @@ function renderVelocityChart(canvasId) {
     r.epicBreakdown.forEach(function(e) {
       if (assigneeF) {
         // When filtering by assignee, sum only that person's tickets SP
-        var myTickets = (e.tickets || []).filter(function(t){ return t.assignee === assigneeF; });
+        var myTickets = (e.tickets || []).filter(function(t){ return assigneeMatches(t.assignee, assigneeF); });
         if (!myTickets.length) return;
         var mySP   = myTickets.reduce(function(s, t){ return s + (t.sp || 0); }, 0);
         var myDone = myTickets.filter(function(t){ return t.status === 'Done' || t.status === 'Accepted'; }).reduce(function(s, t){ return s + (t.sp || 0); }, 0);
@@ -3215,9 +3240,9 @@ function renderCapacityChart() {
     });
   });
 
-  var assigneeFC = (document.getElementById('f-assignee') || {}).value || '';
+  var assigneeFC = getFilterState().assignee;
   var people = Object.keys(devSP)
-    .filter(function(n){ return assigneeFC ? n === assigneeFC : true; })
+    .filter(function(n){ return assigneeMatches(n, assigneeFC); })
     .sort(function(a, b) {
       if (a === 'Unassigned') return 1;
       if (b === 'Unassigned') return -1;
@@ -3384,10 +3409,10 @@ function renderSHDTable() {
       // Epic sub-rows (always injected; hidden until expand)
       if (!isNone) {
         if (hasEpics) {
-          var assigneeFilter = (document.getElementById('f-assignee') || {}).value || '';
+          var assigneeFilter = getFilterState().assignee;
           d.epicBreakdown.forEach(function(epic, ei) {
             var visibleTickets = assigneeFilter
-              ? (epic.tickets || []).filter(function(t){ return t.assignee === assigneeFilter; })
+              ? (epic.tickets || []).filter(function(t){ return assigneeMatches(t.assignee, assigneeFilter); })
               : (epic.tickets || []);
             if (assigneeFilter && visibleTickets.length === 0) return;
             var epicId = rowId + '-e' + ei;
@@ -3647,7 +3672,7 @@ function classifyActive(row) {
 // Returns a NEW bucket-shaped object so callers can compare counts before/after.
 function filterBucketByAssignee(bucket, name) {
   if (!name) return bucket;
-  var tickets = (bucket.tickets || []).filter(function(t){ return (t.assignee || 'Unassigned') === name; });
+  var tickets = (bucket.tickets || []).filter(function(t){ return assigneeMatches(t.assignee, name); });
   var sp = tickets.reduce(function(s, t){ return s + (typeof t.sp === 'number' ? t.sp : 0); }, 0);
   return { count: tickets.length, sp: Math.round(sp * 10) / 10, tickets: tickets };
 }
@@ -3655,7 +3680,7 @@ function filterBucketByAssignee(bucket, name) {
 function renderSprintCloseout(elId) {
   var el = document.getElementById(elId);
   if (!el) return;
-  var assigneeFilter = (document.getElementById('f-assignee') || {}).value || '';
+  var assigneeFilter = getFilterState().assignee;
   var mode = CLOSEOUT_MODE;
   var targetStatus = mode === 'active' ? 'active' : 'closed';
   // Source: matching-status sprints in FILTERED, sorted most-recent first.
@@ -3675,7 +3700,7 @@ function renderSprintCloseout(elId) {
   if (assigneeFilter) {
     rows = rows.filter(function(d){
       return (d.epicBreakdown || []).some(function(epic){
-        return (epic.tickets || []).some(function(t){ return (t.assignee || 'Unassigned') === assigneeFilter; });
+        return (epic.tickets || []).some(function(t){ return assigneeMatches(t.assignee, assigneeFilter); });
       });
     });
   }
@@ -4343,7 +4368,7 @@ function ticketsForBucket(rows, bucket, assigneeFilter) {
     (d.epicBreakdown || []).forEach(function(epic){
       (epic.tickets || []).forEach(function(t){
         if (statusCategory(t.status) !== bucket) return;
-        if (assigneeFilter && (t.assignee || 'Unassigned') !== assigneeFilter) return;
+        if (assigneeFilter && !assigneeMatches(t.assignee, assigneeFilter)) return;
         out.push(Object.assign({}, t, {
           sprintName: d.sprintName,
           board:      d.board,
@@ -4371,7 +4396,7 @@ function openBucketModal(opts) {
   if (!modal) return;
   var bucket = opts.bucket;
   if (!BUCKET_LABELS[bucket]) return;
-  var assigneeF = (document.getElementById('f-assignee') || {}).value || '';
+  var assigneeF = getFilterState().assignee;
   var rows;
   var scopeLabel;
   if (opts.scope === 'sprint') {
