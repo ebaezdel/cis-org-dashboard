@@ -387,14 +387,12 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-s
 .atr-key{flex-shrink:0;font-family:'SFMono-Regular',Consolas,Menlo,monospace;font-size:11px;color:var(--accent);font-weight:600;width:88px;letter-spacing:-.1px;}
 .atr-key.cancelled{text-decoration:line-through;color:var(--muted2);}
 .atr-title{flex:1;min-width:0;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.atr-status{flex-shrink:0;font-size:9px;font-weight:700;padding:2px 8px;border-radius:3px;text-transform:uppercase;letter-spacing:.4px;}
-.ats-accepted,.ats-done{background:#dcfce7;color:#166534;}
-.ats-in-progress,.ats-test-complete,.ats-development-complete{background:#dbeafe;color:#1d4ed8;}
-.ats-pending-approval{background:#fef3c7;color:#92400e;}
-.ats-blocked{background:#fee2e2;color:#991b1b;}
-.ats-ready-to-start,.ats-to-do{background:#f1f5f9;color:#475569;}
-.ats-cancelled{background:#f1f5f9;color:#94a3b8;}
-.ats-default{background:#f1f5f9;color:#64748b;}
+.atr-status{flex-shrink:0;font-size:9px;font-weight:700;padding:3px 9px;border-radius:3px;text-transform:uppercase;letter-spacing:.4px;}
+/* Jira status categories: To Do (gray), In Progress (blue), Done (green).
+   Cancelled is treated as Done because the work is closed. */
+.ats-todo{background:#dfe1e6;color:#42526e;}
+.ats-inprogress{background:#deebff;color:#0747a6;}
+.ats-done{background:#e3fcef;color:#006644;}
 .atr-sp{flex-shrink:0;display:inline-block;padding:2px 7px;border-radius:10px;background:var(--surface2);font-weight:600;min-width:22px;text-align:center;font-size:10px;color:var(--text);}
 .assignee-tickets-empty{padding:24px;text-align:center;color:var(--muted);font-size:12px;}
 .assignee-tickets-summary{display:flex;align-items:center;gap:10px;padding:0 0 12px;color:var(--muted);font-size:11px;}
@@ -795,15 +793,12 @@ tr.ticket-col-hdr.hidden{display:none;}
           <th class="left">EM</th>
           <th class="left">Board</th>
           <th class="left">Sprint</th>
-          <th>Start</th>
-          <th>End</th>
+          <th class="left">Dates</th>
           <th>Status</th>
-          <th>Issues</th>
-          <th>Committed SP</th>
-          <th>Done SP</th>
-          <th>Pending</th>
+          <th>Items</th>
+          <th>Committed</th>
+          <th>Done</th>
           <th>SP Res%</th>
-          <th>Backlog Spr.</th>
         </tr>
       </thead>
       <tbody id="shd-tbody"></tbody>
@@ -3147,7 +3142,7 @@ function renderSHDTable() {
   if (!tbody) return;
   var data = FILTERED.length ? FILTERED : ACTIVE_SPRINTS;
   if (!data.length) {
-    tbody.innerHTML = '<tr><td colspan="13" class="empty">No data matches filters</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="10" class="empty">No data matches filters</td></tr>';
     return;
   }
 
@@ -3184,7 +3179,7 @@ function renderSHDTable() {
     var pillColor = {active:'var(--green)',future:'var(--blue,#3b82f6)',closed:'var(--muted)',none:'var(--muted)'}[status];
 
     html += '<tr class="status-group-hdr' + collapsed + '" onclick="toggleStatusGroup(\'' + grpId + '\',this)">' +
-      '<td colspan="13"><span class="grp-toggle">▼</span>' +
+      '<td colspan="10"><span class="grp-toggle">▼</span>' +
       '<span style="color:' + pillColor + '">' + STATUS_LABELS[status] + '</span>' +
       '<span style="color:var(--muted);font-weight:400;margin-left:8px;">' + count + ' sprint' + (count !== 1 ? 's' : '') + '</span>' +
       '<span style="color:var(--muted);font-weight:400;margin-left:12px;font-size:10px;">' +
@@ -3198,15 +3193,12 @@ function renderSHDTable() {
       '<td class="left"><span>EM</span></td>' +
       '<td class="left"><span>Board</span></td>' +
       '<td class="left"><span>Sprint</span></td>' +
-      '<td><span>Start</span></td>' +
-      '<td><span>End</span></td>' +
+      '<td class="left"><span>Dates</span></td>' +
       '<td><span>Status</span></td>' +
-      '<td><span>Issues</span></td>' +
-      '<td><span>Committed SP</span></td>' +
-      '<td><span>Done SP</span></td>' +
-      '<td><span>Pending</span></td>' +
+      '<td><span>Items</span></td>' +
+      '<td><span>Committed</span></td>' +
+      '<td><span>Done</span></td>' +
       '<td><span>SP Res%</span></td>' +
-      '<td><span>Backlog Spr.</span></td>' +
     '</tr>';
 
     rows.forEach(function(d, ri) {
@@ -3217,20 +3209,20 @@ function renderSHDTable() {
       var hasEpics = d.epicBreakdown && d.epicBreakdown.length > 0;
       var expandBtn = isNone ? '<td></td>' :
         '<td style="text-align:center;"><button class="expand-btn" id="btn-' + rowId + '" onclick="toggleEpicRow(\'' + rowId + '\',this)" title="' + (hasEpics ? 'Show epics' : 'No epic data yet') + '"' + (!hasEpics ? ' style="opacity:.35;cursor:default;"' : '') + '><span class="arrow">▶</span></button></td>';
+      var datesStr = (d.startDate || d.endDate)
+        ? (d.startDate || '?') + ' → ' + (d.endDate || '?')
+        : null;
       html += '<tr class="' + emRowClass(d.em) + ' status-group-row' + hidden + '" data-grp="' + grpId + '" id="sprint-' + rowId + '">' +
         expandBtn +
         '<td class="left"><span style="font-weight:700;color:' + (EM_COLORS[d.em] || '#ccc') + '">' + d.em + '</span></td>' +
         '<td class="left"><a href="https://moveinc.atlassian.net/jira/software/projects/' + d.board + '/boards" target="_blank" style="color:var(--text);font-weight:700;text-decoration:none;">' + d.board + '</a></td>' +
         '<td class="left" style="font-size:10px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + (isNone ? dash : '<a href="https://moveinc.atlassian.net/issues/?jql=' + encodeURIComponent('project = ' + d.board + ' AND sprint = "' + d.sprintName + '" ORDER BY status ASC') + '" target="_blank" style="color:var(--muted);text-decoration:none;" onmouseover="this.style.color=\'var(--blue)\'" onmouseout="this.style.color=\'var(--muted)\'">' + d.sprintName + '</a>') + '</td>' +
-        '<td style="font-size:10px;color:var(--muted);white-space:nowrap;">' + (d.startDate || dash) + '</td>' +
-        '<td style="font-size:10px;color:var(--muted);white-space:nowrap;">' + (d.endDate || dash) + '</td>' +
+        '<td class="left" style="font-size:10px;color:var(--muted);white-space:nowrap;">' + (datesStr || dash) + '</td>' +
         '<td>' + statusPill(d.sprintStatus) + '</td>' +
         '<td>' + (isNone ? dash : d.issues) + '</td>' +
         '<td><strong>' + (isNone ? dash : d.totalSP) + '</strong></td>' +
         '<td>' + (isNone ? dash : d.doneSP) + '</td>' +
-        '<td>' + (isNone ? dash : d.pendingSP) + '</td>' +
         '<td>' + (isNone ? dash : '<span class="badge ' + badgeClass(d.spRes) + '">' + d.spRes + '%</span>') + '</td>' +
-        '<td>' + (isNone ? dash : '<span class="bl-chip ' + blClass(d.backlogSprints) + '">' + d.backlogSprints + '</span>') + '</td>' +
       '</tr>';
 
       // Epic sub-rows (always injected; hidden until expand)
@@ -3245,27 +3237,23 @@ function renderSHDTable() {
             var epicId = rowId + '-e' + ei;
             var epicRes = epic.sp > 0 ? Math.round(epic.done / epic.sp * 100) : 0;
             html += '<tr class="epic-group-row hidden status-group-row' + hidden + '" data-grp="' + grpId + '" data-sprint-row="' + rowId + '" id="' + epicId + '">' +
-              '<td colspan="7" style="padding-left:28px;">' +
+              '<td colspan="6" style="padding-left:28px;">' +
                 '<button class="expand-btn" id="btn-' + epicId + '" onclick="toggleTicketRows(\'' + epicId + '\',this)" style="margin-right:6px;"><span class="arrow">▶</span></button>' +
                 '<strong style="font-size:11px;">' + (epic.key ? '<a href="https://moveinc.atlassian.net/browse/' + epic.key + '" target="_blank" style="color:var(--blue,#3b82f6);text-decoration:none;font-family:monospace;">' + epic.key + '</a> — ' : '') + epic.label + '</strong>' +
               '</td>' +
               '<td style="font-size:11px;">' + epic.issues + '</td>' +
               '<td style="font-size:11px;">' + epic.sp + '</td>' +
               '<td style="font-size:11px;">' + epic.done + '</td>' +
-              '<td style="font-size:11px;">' + (epic.sp - epic.done) + '</td>' +
               '<td>' + (epic.sp > 0 ? '<span class="badge ' + badgeClass(epicRes) + '">' + epicRes + '%</span>' : dash) + '</td>' +
-              '<td></td>' +
             '</tr>';
-            // Ticket column sub-header under each epic
+            // Ticket column sub-header under each epic — 10 cols total
             var ticketHdrId = epicId + '-thdr';
             html += '<tr class="ticket-col-hdr hidden" data-epic-row="' + epicId + '" id="' + ticketHdrId + '">' +
               '<td></td>' +
-              '<td colspan="5" style="padding-left:44px;"><span>Ticket · Title</span></td>' +
+              '<td colspan="4" style="padding-left:44px;"><span>Ticket · Title</span></td>' +
               '<td><span>Status</span></td>' +
-              '<td></td>' +
               '<td><span>SP</span></td>' +
-              '<td colspan="2"><span>Assignee</span></td>' +
-              '<td colspan="2"></td>' +
+              '<td colspan="3"><span>Assignee</span></td>' +
             '</tr>';
             // Ticket rows per epic
             visibleTickets.forEach(function(t, ti) {
@@ -3285,23 +3273,21 @@ function renderSHDTable() {
               var itypeName = t.issueType || 'Story';
               html += '<tr class="ticket-row hidden" data-epic-row="' + epicId + '">' +
                 '<td></td>' +
-                '<td colspan="5" style="padding-left:44px;">' +
+                '<td colspan="4" style="padding-left:44px;">' +
                   '<span class="itype ' + itypeClass + '">' + itypeName + '</span>' +
                   '<a href="https://moveinc.atlassian.net/browse/' + t.key + '" target="_blank" class="ticket-key">' + t.key + '</a>' +
                   '<span style="margin-left:8px;font-size:10px;color:var(--text2);">' + (t.title || '') + '</span>' +
                 '</td>' +
                 '<td><span class="pill ' + sc + '"><span class="pill-dot"></span>' + statusLabel + '</span></td>' +
-                '<td></td>' +
                 '<td style="font-size:10px;text-align:center;">' + (t.sp || '—') + '</td>' +
-                '<td style="font-size:10px;color:var(--muted);" colspan="2">' + (t.assignee || '—') + '</td>' +
-                '<td colspan="2"></td>' +
+                '<td style="font-size:10px;color:var(--muted);" colspan="3">' + (t.assignee || '—') + '</td>' +
               '</tr>';
             });
           });
         } else {
           // Empty state placeholder row
           html += '<tr class="epic-group-row hidden status-group-row' + hidden + '" data-grp="' + grpId + '" data-sprint-row="' + rowId + '">' +
-            '<td colspan="13"><div class="no-epic-data">No epic data — populate <code>epicBreakdown[]</code> via Jira sync</div></td>' +
+            '<td colspan="10"><div class="no-epic-data">No epic data — populate <code>epicBreakdown[]</code> via Jira sync</div></td>' +
           '</tr>';
         }
       }
@@ -3320,13 +3306,11 @@ function renderSHDTable() {
   });
   var totRes = totCommitted > 0 ? Math.round(totDone / totCommitted * 100) : 0;
   html += '<tr class="tbl-totals">' +
-    '<td class="left" colspan="7" style="font-weight:700;color:var(--muted);letter-spacing:.4px;">TOTAL</td>' +
+    '<td class="left" colspan="6" style="font-weight:700;color:var(--muted);letter-spacing:.4px;">TOTAL</td>' +
     '<td><strong>' + totIssues + '</strong></td>' +
     '<td><strong>' + Math.round(totCommitted * 10) / 10 + '</strong></td>' +
     '<td><strong>' + Math.round(totDone * 10) / 10 + '</strong></td>' +
-    '<td><strong>' + Math.round(totPending * 10) / 10 + '</strong></td>' +
     '<td><span class="badge ' + badgeClass(totRes) + '">' + totRes + '%</span></td>' +
-    '<td></td>' +
   '</tr>';
 
   tbody.innerHTML = html;
@@ -3496,13 +3480,18 @@ function ticketIconLetter(issueType) {
   var c = String(issueType || '?').charAt(0).toUpperCase();
   return c === 'S' && /spike/i.test(issueType) ? '◆' : c;
 }
+// Map any specific Jira status to one of three Jira "status categories":
+// To Do (gray), In Progress (blue), Done (green). Cancelled rolls into Done
+// because the ticket is closed — same convention Jira itself uses.
 function statusBadgeClass(status) {
-  var s = String(status || '').toLowerCase().replace(/\s+/g, '-');
-  // Aliases — match the same buckets used elsewhere
-  if (s === 'done') s = 'accepted';
-  if (s === 'dev-complete') s = 'development-complete';
-  if (s === 'acceptance')   s = 'accepted';
-  return 'ats-' + s;
+  var s = String(status || '').toLowerCase().trim();
+  // Done category — anything finished (work or won't-do)
+  if (/(^|\s)(accepted|acceptance|done|cancel(led|ed)?|won.?t.?do|closed|resolved|complete[d]?)(\s|$)/.test(s)
+      || /^accepted$/.test(s) || /^done$/.test(s) || /^cancelled$/.test(s)) return 'ats-done';
+  // In Progress category — anything actively moving
+  if (/(in.?progress|test.?complete|dev.?(?:elopment.?)?complete|in.?review|pending.?approval|review|blocked)/.test(s)) return 'ats-inprogress';
+  // To Do category — not started yet (default fallback too)
+  return 'ats-todo';
 }
 
 // Pull every ticket assigned to `dev` across the rows the card represents.
