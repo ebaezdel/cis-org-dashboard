@@ -379,6 +379,15 @@ function calcMetrics(issues) {
 
 // ─── Epic / effort / dev breakdown builders ───────────────────────────────────
 
+// Pick the smallest meaningful avatar URL Jira returns. Sizes are
+// '16x16' / '24x24' / '32x32' / '48x48'. We use 24×24 — sharp for
+// cards/modals at common viewport scales without bloating the row size.
+function avatarUrlFromAssignee(a) {
+  if (!a) return '';
+  const urls = a.avatarUrls || {};
+  return urls['24x24'] || urls['32x32'] || urls['48x48'] || urls['16x16'] || '';
+}
+
 function buildEpicBreakdown(issues) {
   const epicMap = {};
   const other   = { key: null, label: 'Other / Sub-tasks', issues: [], sp: 0, done: 0 };
@@ -391,11 +400,14 @@ function buildEpicBreakdown(issues) {
     const issueSP      = sp(issue);
     const ticket = {
       key:       issue.key,
-      title:     (f.summary || '').slice(0, 50),
+      title:     (f.summary || '').slice(0, 60),
       status:    f.status?.name || '',
       sp:        issueSP || null,
       assignee:  f.assignee?.displayName || '',
+      avatarUrl: avatarUrlFromAssignee(f.assignee),
       issueType: f.issuetype?.name || 'Story',
+      epicKey:   epicKey || '',
+      epicLabel: epicLabel || '',
     };
 
     if (epicKey) {
@@ -419,14 +431,15 @@ function buildEpicBreakdown(issues) {
 function buildTicketsPerDev(issues) {
   const devMap = {};
   issues.forEach(issue => {
-    const name = issue.fields?.assignee?.displayName || 'Unassigned';
-    if (!devMap[name]) devMap[name] = { tickets: 0, sp: 0 };
+    const a = issue.fields?.assignee;
+    const name = a?.displayName || 'Unassigned';
+    if (!devMap[name]) devMap[name] = { tickets: 0, sp: 0, avatarUrl: avatarUrlFromAssignee(a) };
     devMap[name].tickets++;
     devMap[name].sp = r1(devMap[name].sp + sp(issue));
   });
   return Object.entries(devMap)
     .sort((a, b) => b[1].sp - a[1].sp)
-    .map(([dev, v]) => ({ dev, tickets: v.tickets, sp: v.sp }));
+    .map(([dev, v]) => ({ dev, tickets: v.tickets, sp: v.sp, avatarUrl: v.avatarUrl }));
 }
 
 function isCntntLinked(issue) {
@@ -470,7 +483,7 @@ function serializeObj(obj) {
 }
 
 function serializeTicket(t) {
-  return `{key:${jsStr(t.key)},title:${jsStr(t.title)},status:${jsStr(t.status)},sp:${t.sp === null ? 'null' : t.sp},assignee:${jsStr(t.assignee)},issueType:${jsStr(t.issueType)}}`;
+  return `{key:${jsStr(t.key)},title:${jsStr(t.title)},status:${jsStr(t.status)},sp:${t.sp === null ? 'null' : t.sp},assignee:${jsStr(t.assignee)},avatarUrl:${jsStr(t.avatarUrl || '')},issueType:${jsStr(t.issueType)},epicKey:${jsStr(t.epicKey || '')},epicLabel:${jsStr(t.epicLabel || '')}}`;
 }
 
 function serializeEpicBreakdown(arr) {
@@ -481,7 +494,7 @@ function serializeEpicBreakdown(arr) {
 }
 
 function serializeTicketsPerDev(arr) {
-  return '[' + arr.map(e => `{dev:${jsStr(e.dev)},tickets:${e.tickets},sp:${e.sp}}`).join(',') + ']';
+  return '[' + arr.map(e => `{dev:${jsStr(e.dev)},tickets:${e.tickets},sp:${e.sp},avatarUrl:${jsStr(e.avatarUrl || '')}}`).join(',') + ']';
 }
 
 // ─── HTML patcher ─────────────────────────────────────────────────────────────

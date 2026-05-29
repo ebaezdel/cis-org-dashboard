@@ -342,7 +342,8 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-s
 .bc-avatar-btn:hover .bc-avatar{transform:scale(1.1);box-shadow:0 0 0 2px var(--accent);}
 .bc-avatar-btn:focus-visible{outline:none;}
 .bc-avatar-btn:focus-visible .bc-avatar{box-shadow:0 0 0 2px var(--accent);}
-.bc-avatar{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;font-size:9px;font-weight:700;color:#fff;letter-spacing:.2px;border:1.5px solid var(--surface);margin-left:-5px;cursor:default;flex-shrink:0;transition:transform .15s,box-shadow .15s;}
+.bc-avatar{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;font-size:9px;font-weight:700;color:#fff;letter-spacing:.2px;border:1.5px solid var(--surface);margin-left:-5px;cursor:default;flex-shrink:0;transition:transform .15s,box-shadow .15s;overflow:hidden;}
+.bc-avatar-img img{width:100%;height:100%;object-fit:cover;display:block;}
 .bc-avatar-btn:first-child .bc-avatar,.bc-avatars > .bc-avatar:first-child{margin-left:0;}
 .bc-avatar-more{display:inline-flex;align-items:center;justify-content:center;height:22px;padding:0 7px;border-radius:11px;background:var(--surface2);color:var(--muted);font-size:9px;font-weight:700;margin-left:4px;}
 .bc-footer-actions{display:flex;align-items:center;gap:8px;flex-shrink:0;}
@@ -375,14 +376,16 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-s
 .assignee-ticket-row{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:6px;font-size:12px;color:var(--text);text-decoration:none;transition:background .12s;}
 .assignee-ticket-row:hover{background:var(--surface2);}
 .assignee-ticket-row + .assignee-ticket-row{border-top:1px solid var(--border);}
-.atr-icon{flex-shrink:0;width:16px;height:16px;border-radius:3px;display:inline-flex;align-items:center;justify-content:center;font-size:10px;color:#fff;font-weight:700;}
-.atr-icon-story{background:#65ba43;}
-.atr-icon-task{background:#4bade8;}
-.atr-icon-bug{background:#e5493a;}
-.atr-icon-spike{background:#ffb400;}
-.atr-icon-incident{background:#ef4444;}
-.atr-icon-design{background:#a855f7;}
-.atr-icon-dependency{background:#64748b;}
+.atr-icon{flex-shrink:0;width:16px;height:16px;border-radius:3px;display:inline-flex;align-items:center;justify-content:center;color:#fff;}
+.atr-icon svg{width:11px;height:11px;display:block;}
+.atr-icon-story{background:#63ba3c;}     /* Jira green */
+.atr-icon-task{background:#4bade8;}       /* Jira blue */
+.atr-icon-bug{background:#e5493a;}        /* Jira red */
+.atr-icon-spike{background:#9b51e0;}      /* Jira spike purple */
+.atr-icon-incident{background:#cd1316;}   /* Jira incident */
+.atr-icon-design{background:#ec4899;}     /* Pink */
+.atr-icon-dependency{background:#64748b;} /* Slate */
+.atr-icon-epic{background:#9b51e0;}        /* Jira epic purple */
 .atr-icon-default{background:#94a3b8;}
 .atr-key{flex-shrink:0;font-family:'SFMono-Regular',Consolas,Menlo,monospace;font-size:11px;color:var(--accent);font-weight:600;width:88px;letter-spacing:-.1px;}
 .atr-key.cancelled{text-decoration:line-through;color:var(--muted2);}
@@ -449,8 +452,28 @@ tr.closeout-detail-row.hidden{display:none;}
 .closeout-detail-section:last-child{margin-bottom:0;}
 .closeout-detail-section-title{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;display:flex;align-items:center;gap:8px;}
 .closeout-detail-section-title .count{color:var(--text);background:var(--surface2);padding:2px 8px;border-radius:10px;font-size:10px;}
-.closeout-tickets{display:flex;flex-direction:column;gap:1px;}
-/* Reuse the assignee-ticket-row styling for visual consistency */
+.closeout-tickets{display:flex;flex-direction:column;gap:2px;}
+/* Closeout ticket row — extends assignee-ticket-row with avatar + parent epic */
+.co-row{display:grid;grid-template-columns:24px 16px 88px minmax(180px,1fr) minmax(120px,1.2fr) 110px 36px;align-items:center;gap:10px;padding:8px 10px;border-radius:6px;font-size:12px;color:var(--text);text-decoration:none;border:1px solid transparent;}
+.co-row:hover{filter:brightness(.97);}
+/* Tinted backgrounds per bucket — light enough that text stays readable */
+.co-bucket-completed{background:#f0fdf4;border-color:#dcfce7;}
+.co-bucket-completed:hover{background:#e0fae6;}
+.co-bucket-carryover{background:#fffbeb;border-color:#fef3c7;}
+.co-bucket-carryover:hover{background:#fff5d6;}
+.co-bucket-cancelled{background:#f8fafc;border-color:#e2e8f0;color:var(--muted);}
+.co-bucket-cancelled:hover{background:#f1f5f9;}
+.co-avatar-wrap{display:inline-flex;}
+.co-avatar-wrap .bc-avatar{width:20px;height:20px;border-width:1px;font-size:8px;margin:0;}
+.co-row .atr-icon{width:14px;height:14px;}
+.co-row .atr-icon svg{width:9px;height:9px;}
+.co-row .atr-key{width:auto;font-size:11px;}
+.co-epic{display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);min-width:0;}
+.co-epic-key{font-family:'SFMono-Regular',Consolas,Menlo,monospace;font-size:10px;color:#9b51e0;background:#f5f0fc;padding:1px 6px;border-radius:3px;flex-shrink:0;font-weight:600;}
+.co-epic-label{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--muted);}
+.co-epic-empty{font-size:11px;color:var(--muted2);}
+.co-row .atr-status{justify-self:end;}
+.co-row .atr-sp{justify-self:end;}
 
 /* Charts row */
 .charts-row{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px;}
@@ -2112,7 +2135,7 @@ function renderAssigneeComboOptions(query) {
     html += matches.map(function(name){
       var sel = name === selectedName ? ' selected' : '';
       return '<div class="assignee-combo-option' + sel + '" data-value="' + escapeHtml(name) + '" tabindex="0">' +
-        initialsAvatar(name) + '<span>' + escapeHtml(name) + '</span></div>';
+        initialsAvatar(name, lookupAvatarUrl(name)) + '<span>' + escapeHtml(name) + '</span></div>';
     }).join('');
   }
   panel.innerHTML = html;
@@ -2676,7 +2699,7 @@ function renderBoardHealthGrid(containerId) {
              'data-board="' + boardAttr + '" data-sprint-name="' + sprintNameAttr + '" ' +
              'data-dev="' + escapeHtml(e.dev) + '" ' +
              'aria-label="View ' + escapeHtml(e.dev) + '’s tickets" title="' + escapeHtml(e.dev) + ' — ' + e.tickets + ' items, ' + e.sp + ' SP">' +
-               initialsAvatar(e.dev) +
+               initialsAvatar(e.dev, e.avatarUrl) +
              '</button>';
     }).join('') + (moreCount > 0 ? '<span class="bc-avatar-more" title="' + moreCount + ' more">+' + moreCount + '</span>' : '');
 
@@ -3376,19 +3399,32 @@ function pctBand(p) {
   return p >= 80 ? 'green' : p >= 50 ? 'amber' : 'red';
 }
 
-function renderCloseoutTickets(tickets) {
+function renderCloseoutTickets(tickets, bucket) {
   if (!tickets.length) return '<div class="assignee-tickets-empty">None.</div>';
+  var bucketClass = bucket ? ' co-bucket-' + bucket : '';
   var rows = tickets.map(function(t){
     var statusClass = statusBadgeClass(t.status);
     var iconCls     = ticketIconClass(t.issueType);
-    var iconLetter  = ticketIconLetter(t.issueType);
+    var iconHTML    = ticketIconHTML(t.issueType);
     var keyClass    = 'atr-key' + (/cancel/i.test(t.status) ? ' cancelled' : '');
     var spStr       = t.sp == null ? '–' : t.sp;
     var browseUrl   = 'https://moveinc.atlassian.net/browse/' + encodeURIComponent(t.key);
-    return '<a class="assignee-ticket-row" href="' + browseUrl + '" target="_blank" rel="noopener">' +
-      '<span class="atr-icon ' + iconCls + '" title="' + escapeHtml(t.issueType || '') + '">' + iconLetter + '</span>' +
+    var assignee    = t.assignee || 'Unassigned';
+    var avatarUrl   = t.avatarUrl || lookupAvatarUrl(t.assignee);
+    var epicLabel   = t.epicLabel || '';
+    var epicKey     = t.epicKey   || '';
+    var epicCell    = epicLabel
+      ? '<span class="co-epic" title="' + escapeHtml(epicLabel) + (epicKey ? ' (' + epicKey + ')' : '') + '">' +
+          (epicKey ? '<span class="co-epic-key">' + escapeHtml(epicKey) + '</span>' : '') +
+          '<span class="co-epic-label">' + escapeHtml(epicLabel) + '</span>' +
+        '</span>'
+      : '<span class="co-epic-empty">—</span>';
+    return '<a class="assignee-ticket-row co-row' + bucketClass + '" href="' + browseUrl + '" target="_blank" rel="noopener">' +
+      '<span class="co-avatar-wrap" title="' + escapeHtml(assignee) + '">' + initialsAvatar(assignee, avatarUrl) + '</span>' +
+      '<span class="atr-icon ' + iconCls + '" title="' + escapeHtml(t.issueType || '') + '">' + iconHTML + '</span>' +
       '<span class="' + keyClass + '">' + escapeHtml(t.key) + '</span>' +
       '<span class="atr-title" title="' + escapeHtml(t.title || '') + '">' + escapeHtml(t.title || '') + '</span>' +
+      epicCell +
       '<span class="atr-status ' + statusClass + '">' + escapeHtml(t.status || '—') + '</span>' +
       '<span class="atr-sp" title="Story points">' + spStr + '</span>' +
     '</a>';
@@ -3481,15 +3517,15 @@ function renderSprintCloseout(elId) {
       '<td colspan="6"><div class="closeout-detail-inner">' +
         '<div class="closeout-detail-section">' +
           '<div class="closeout-detail-section-title">Carryover <span class="count">' + c.carryover.count + ' items · ' + c.carryover.sp + ' SP</span></div>' +
-          renderCloseoutTickets(c.carryover.tickets) +
+          renderCloseoutTickets(c.carryover.tickets, 'carryover') +
         '</div>' +
         '<div class="closeout-detail-section">' +
           '<div class="closeout-detail-section-title">Cancelled <span class="count">' + c.cancelled.count + ' items · ' + c.cancelled.sp + ' SP</span></div>' +
-          renderCloseoutTickets(c.cancelled.tickets) +
+          renderCloseoutTickets(c.cancelled.tickets, 'cancelled') +
         '</div>' +
         '<div class="closeout-detail-section">' +
           '<div class="closeout-detail-section-title">Completed <span class="count">' + c.completed.count + ' items · ' + c.completed.sp + ' SP</span></div>' +
-          renderCloseoutTickets(c.completed.tickets) +
+          renderCloseoutTickets(c.completed.tickets, 'completed') +
         '</div>' +
       '</div></td>' +
     '</tr>';
@@ -3542,24 +3578,66 @@ function escapeHtml(s) {
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
-function initialsAvatar(name) {
+// Render an assignee avatar. When a Jira avatarUrl is provided, use the
+// real image; on load failure, JS swaps in the initials fallback. The
+// outer span keeps the colored background so missing photos still look
+// intentional rather than broken.
+function initialsAvatar(name, avatarUrl) {
   var safeName = escapeHtml(name || 'Unassigned');
-  return '<span class="bc-avatar" style="background:' + avatarColorFor(name) + '" title="' + safeName + '">' +
-    escapeHtml(avatarInitials(name)) + '</span>';
+  var initials = escapeHtml(avatarInitials(name));
+  var bg       = avatarColorFor(name);
+  if (avatarUrl) {
+    var safeUrl = escapeHtml(avatarUrl);
+    return '<span class="bc-avatar bc-avatar-img" style="background:' + bg + '" title="' + safeName + '">' +
+      '<img src="' + safeUrl + '" alt="" loading="lazy" referrerpolicy="no-referrer" ' +
+      'onerror="this.parentNode.classList.remove(\'bc-avatar-img\');this.replaceWith(document.createTextNode(\'' + initials.replace(/'/g,"\\'") + '\'));" />' +
+    '</span>';
+  }
+  return '<span class="bc-avatar" style="background:' + bg + '" title="' + safeName + '">' +
+    initials + '</span>';
 }
 
 // Aggregate ticketsPerDev across one or more rows. Returns sorted array of
 // { dev, tickets, sp } with the highest SP first, "Unassigned" pinned last.
+// Walk every sprint row to find the first non-empty avatarUrl for `name`.
+// Cached per-name on first call so repeated lookups are O(1).
+var AVATAR_URL_CACHE = null;
+function buildAvatarUrlCache() {
+  AVATAR_URL_CACHE = {};
+  if (!Array.isArray(window.ALL_SPRINTS_FY26)) return;
+  window.ALL_SPRINTS_FY26.forEach(function(d){
+    (d.ticketsPerDev || []).forEach(function(e){
+      if (e.dev && e.avatarUrl && !AVATAR_URL_CACHE[e.dev]) {
+        AVATAR_URL_CACHE[e.dev] = e.avatarUrl;
+      }
+    });
+    (d.epicBreakdown || []).forEach(function(epic){
+      (epic.tickets || []).forEach(function(t){
+        if (t.assignee && t.avatarUrl && !AVATAR_URL_CACHE[t.assignee]) {
+          AVATAR_URL_CACHE[t.assignee] = t.avatarUrl;
+        }
+      });
+    });
+  });
+}
+function lookupAvatarUrl(name) {
+  if (!name || name === 'Unassigned') return '';
+  if (AVATAR_URL_CACHE === null) buildAvatarUrlCache();
+  return AVATAR_URL_CACHE[name] || '';
+}
+
 function aggregateWorkload(rows) {
   var byDev = {};
   rows.forEach(function(r){
     (r.ticketsPerDev || []).forEach(function(e){
-      if (!byDev[e.dev]) byDev[e.dev] = { dev: e.dev, tickets: 0, sp: 0 };
+      if (!byDev[e.dev]) byDev[e.dev] = { dev: e.dev, tickets: 0, sp: 0, avatarUrl: e.avatarUrl || '' };
       byDev[e.dev].tickets += (e.tickets || 0);
       byDev[e.dev].sp      += (e.sp || 0);
+      // Adopt the first non-empty avatarUrl we encounter for this dev
+      if (!byDev[e.dev].avatarUrl && e.avatarUrl) byDev[e.dev].avatarUrl = e.avatarUrl;
     });
   });
-  var arr = Object.values(byDev).map(function(e){ return { dev: e.dev, tickets: e.tickets, sp: Math.round(e.sp * 10) / 10 }; });
+  var arr = Object.values(byDev).map(function(e){ return { dev: e.dev, tickets: e.tickets, sp: Math.round(e.sp * 10) / 10, avatarUrl: e.avatarUrl || '' }; });
   arr.sort(function(a,b){
     if (a.dev === 'Unassigned') return 1;
     if (b.dev === 'Unassigned') return -1;
@@ -3592,7 +3670,7 @@ function renderWorkloadTable(rows) {
     totalItems += e.tickets;
     totalSP    += e.sp;
     return '<tr>' +
-      '<td><div class="workload-name-cell">' + initialsAvatar(e.dev) + '<span>' + escapeHtml(e.dev) + '</span></div></td>' +
+      '<td><div class="workload-name-cell">' + initialsAvatar(e.dev, e.avatarUrl || lookupAvatarUrl(e.dev)) + '<span>' + escapeHtml(e.dev) + '</span></div></td>' +
       '<td class="num">' + e.tickets + '</td>' +
       '<td class="num" style="color:var(--muted2)">0</td>' +
       '<td class="num"><span class="workload-sp">' + e.sp + '</span></td>' +
@@ -3666,11 +3744,35 @@ function ticketIconClass(issueType) {
   if (t === 'incident')   return 'atr-icon-incident';
   if (t === 'design')     return 'atr-icon-design';
   if (t === 'dependency') return 'atr-icon-dependency';
+  if (t === 'epic')       return 'atr-icon-epic';
   return 'atr-icon-default';
 }
-function ticketIconLetter(issueType) {
-  var c = String(issueType || '?').charAt(0).toUpperCase();
-  return c === 'S' && /spike/i.test(issueType) ? '◆' : c;
+
+// Jira-style issue-type SVG glyphs. The wrapper span carries the brand
+// color (atr-icon-*); the SVG fill is white and renders the symbol shape.
+// Kept inline to avoid extra HTTP requests and to keep the dashboard a
+// single self-contained file. 12×12 viewBox.
+var TICKET_ICON_SVG = {
+  // Story — bookmark/page (Jira green)
+  story:      '<svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true"><path fill="currentColor" d="M3 2h10a1 1 0 0 1 1 1v11l-6-3-6 3V3a1 1 0 0 1 1-1zm5 7.6l4 2V4H4v7.6l4-2z"/></svg>',
+  // Task — checkmark in box (Jira blue)
+  task:       '<svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true"><path fill="currentColor" d="M3 2h10a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1zm.7 5.5l3.4 3.4L12.7 5l-1.1-1L7.1 8.6 4.8 6.4 3.7 7.5z"/></svg>',
+  // Bug — bug body with legs (Jira red)
+  bug:        '<svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true"><circle cx="8" cy="8" r="4" fill="currentColor"/><circle cx="8" cy="6" r="1.4" fill="#fff"/></svg>',
+  // Spike — diamond (lightning concept; Atlassian uses a lightning glyph)
+  spike:      '<svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true"><path fill="currentColor" d="M9 2L4 9h3l-1 5 5-7H8l1-5z"/></svg>',
+  // Incident — exclamation triangle
+  incident:   '<svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true"><path fill="currentColor" d="M8 1L1 14h14L8 1zm0 5v4m0 1v1.2" stroke="#fff" stroke-width="1.5" fill="currentColor" stroke-linecap="round"/></svg>',
+  // Design — sparkle / star
+  design:     '<svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true"><path fill="currentColor" d="M8 1l1.7 4.6L14 7l-4.3 1.4L8 13l-1.7-4.6L2 7l4.3-1.4L8 1z"/></svg>',
+  // Dependency — chain link
+  dependency: '<svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true"><path fill="currentColor" d="M5 6h6v4H5z"/></svg>',
+  // Epic — lightning bolt (Jira purple)
+  epic:       '<svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true"><path fill="currentColor" d="M9 1L3 9h4l-1 6 6-9H8l1-5z"/></svg>',
+};
+function ticketIconHTML(issueType) {
+  var t = String(issueType || '').toLowerCase();
+  return TICKET_ICON_SVG[t] || ('<span style="font-size:9px;font-weight:700;">' + (String(issueType || '?').charAt(0).toUpperCase()) + '</span>');
 }
 // Map any specific Jira status to one of three Jira "status categories":
 // To Do (gray), In Progress (blue), Done (green). Cancelled rolls into Done
@@ -3754,12 +3856,12 @@ function renderAssigneeTickets(tickets) {
   var rows = tickets.map(function(t){
     var statusClass = statusBadgeClass(t.status);
     var iconCls     = ticketIconClass(t.issueType);
-    var iconLetter  = ticketIconLetter(t.issueType);
+    var iconHTML    = ticketIconHTML(t.issueType);
     var keyClass    = 'atr-key' + (/cancel/i.test(t.status) ? ' cancelled' : '');
     var spStr       = t.sp == null ? '–' : t.sp;
     var browseUrl   = 'https://moveinc.atlassian.net/browse/' + encodeURIComponent(t.key);
     return '<a class="assignee-ticket-row" href="' + browseUrl + '" target="_blank" rel="noopener">' +
-      '<span class="atr-icon ' + iconCls + '" title="' + escapeHtml(t.issueType) + '">' + iconLetter + '</span>' +
+      '<span class="atr-icon ' + iconCls + '" title="' + escapeHtml(t.issueType) + '">' + iconHTML + '</span>' +
       '<span class="' + keyClass + '">' + escapeHtml(t.key) + '</span>' +
       '<span class="atr-title" title="' + escapeHtml(t.title) + '">' + escapeHtml(t.title) + '</span>' +
       '<span class="atr-status ' + statusClass + '">' + escapeHtml(t.status || '—') + '</span>' +
@@ -3776,7 +3878,7 @@ function openAssigneeModal(board, sprintName, dev) {
   if (!modal) return;
   var tickets = ticketsForAssignee(rows, dev);
   document.getElementById('assignee-modal-title').innerHTML =
-    initialsAvatar(dev) + '<span style="margin-left:10px;">' + escapeHtml(dev) + '</span>';
+    initialsAvatar(dev, lookupAvatarUrl(dev)) + '<span style="margin-left:10px;">' + escapeHtml(dev) + '</span>';
   document.getElementById('assignee-modal-sprint').textContent =
     sprintName && !/^\d+ sprints$/.test(sprintName) ? sprintName : (board + ' · ' + rows.length + ' sprints');
   document.getElementById('assignee-modal-body').innerHTML = renderAssigneeTickets(tickets);
