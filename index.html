@@ -230,9 +230,18 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-s
 .board-card.health-yellow::before{background:var(--yellow);}
 .board-card.health-red::before{background:var(--red);}
 .board-card.health-none::before{background:var(--muted2);}
-.bc-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;}
-.bc-name{font-size:14px;font-weight:700;color:var(--text);}
-.bc-em{font-size:10px;color:var(--muted);}
+.bc-header{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:2px;}
+.bc-title{display:flex;align-items:center;flex-wrap:wrap;gap:6px;min-width:0;flex:1;}
+.bc-name{font-size:14px;font-weight:700;color:var(--text);flex-shrink:0;}
+.bc-sprint-name{font-size:14px;font-weight:700;color:var(--text);font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;letter-spacing:-.2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;}
+.bc-sprint-name.multi{font-family:inherit;letter-spacing:0;font-weight:600;color:var(--muted);}
+.bc-sprint-dot{display:inline-block;width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-left:2px;}
+.bc-sprint-dot-active{background:var(--green);box-shadow:0 0 0 0 rgba(34,197,94,.6);animation:bcDotPulse 2.4s ease-in-out infinite;}
+.bc-sprint-dot-future{background:var(--accent);}
+.bc-sprint-dot-closed{background:var(--muted2);}
+@keyframes bcDotPulse{0%,100%{box-shadow:0 0 0 0 rgba(34,197,94,.5);}50%{box-shadow:0 0 0 5px rgba(34,197,94,0);}}
+.bc-subline{display:flex;align-items:center;gap:5px;font-size:10px;color:var(--muted);margin-bottom:4px;}
+.bc-em{font-size:10px;color:var(--muted);font-weight:500;}
 .bc-pct{font-size:20px;font-weight:700;line-height:1;}
 .bc-pct.green{color:var(--green);}
 .bc-pct.yellow{color:var(--yellow);}
@@ -304,11 +313,18 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-s
 .bc-types-line{font-size:10px;color:var(--muted);margin-top:3px;display:flex;flex-wrap:wrap;gap:5px;}
 .bc-types-line .sep{color:var(--muted2);opacity:.5;}
 
+/* Goal toggle row — its own line, just a small inline pill */
+.bc-goal-row{margin-top:6px;}
+
 /* Footer: avatars + actions */
 .bc-footer{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px;padding-top:8px;border-top:1px solid var(--border);}
-.bc-avatars{display:flex;align-items:center;gap:0;flex:1;min-width:0;}
-.bc-avatar{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;font-size:9px;font-weight:700;color:#fff;letter-spacing:.2px;border:1.5px solid var(--surface);margin-left:-5px;cursor:default;flex-shrink:0;}
-.bc-avatar:first-child{margin-left:0;}
+.bc-avatars{display:flex;align-items:center;gap:0;flex:1;min-width:0;flex-wrap:wrap;}
+.bc-avatar-btn{background:none;border:none;padding:0;cursor:pointer;display:inline-flex;align-items:center;font-family:inherit;}
+.bc-avatar-btn:hover .bc-avatar{transform:scale(1.1);box-shadow:0 0 0 2px var(--accent);}
+.bc-avatar-btn:focus-visible{outline:none;}
+.bc-avatar-btn:focus-visible .bc-avatar{box-shadow:0 0 0 2px var(--accent);}
+.bc-avatar{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;font-size:9px;font-weight:700;color:#fff;letter-spacing:.2px;border:1.5px solid var(--surface);margin-left:-5px;cursor:default;flex-shrink:0;transition:transform .15s,box-shadow .15s;}
+.bc-avatar-btn:first-child .bc-avatar,.bc-avatars > .bc-avatar:first-child{margin-left:0;}
 .bc-avatar-more{display:inline-flex;align-items:center;justify-content:center;height:22px;padding:0 7px;border-radius:11px;background:var(--surface2);color:var(--muted);font-size:9px;font-weight:700;margin-left:4px;}
 .bc-footer-actions{display:flex;align-items:center;gap:8px;flex-shrink:0;}
 .bc-menu-btn{background:none;border:1px solid var(--border);color:var(--muted);font-size:14px;font-weight:700;line-height:1;cursor:pointer;border-radius:4px;padding:2px 7px;letter-spacing:1px;transition:all .15s;font-family:inherit;}
@@ -317,20 +333,51 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-s
 /* Workload-by-assignee modal */
 .modal-overlay{display:none;position:fixed;inset:0;z-index:200;background:rgba(15,23,42,.5);align-items:center;justify-content:center;padding:20px;}
 .modal-overlay.open{display:flex;}
-.modal-card{background:var(--surface);border-radius:10px;box-shadow:0 10px 32px rgba(0,0,0,.2);width:100%;max-width:560px;max-height:80vh;overflow:auto;padding:20px 24px;}
-.modal-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;}
-.modal-header h3{font-size:16px;font-weight:600;color:var(--text);margin:0;}
-.modal-close{background:none;border:none;font-size:20px;line-height:1;cursor:pointer;color:var(--muted);padding:4px 8px;border-radius:4px;font-family:inherit;}
+.modal-card{background:var(--surface);border-radius:10px;box-shadow:0 10px 32px rgba(0,0,0,.2);width:100%;max-width:560px;max-height:calc(100vh - 60px);overflow:hidden;display:flex;flex-direction:column;}
+.modal-header{display:flex;align-items:center;justify-content:space-between;padding:18px 22px 4px;flex-shrink:0;}
+.modal-header h3{font-size:15px;font-weight:600;color:var(--text);margin:0;display:flex;align-items:center;}
+.modal-close{background:none;border:none;font-size:18px;line-height:1;cursor:pointer;color:var(--muted);padding:2px 8px;border-radius:4px;font-family:inherit;}
 .modal-close:hover{background:var(--surface2);color:var(--text);}
-.modal-subtitle{font-size:12px;color:var(--muted);margin-bottom:16px;font-family:monospace;}
+.modal-subtitle{font-size:11px;color:var(--muted);font-family:'SFMono-Regular',Consolas,Menlo,monospace;letter-spacing:-.1px;padding:0 22px 12px;flex-shrink:0;}
+.modal-body{padding:0 22px 18px;overflow-y:auto;}
 .workload-table{width:100%;border-collapse:collapse;font-size:12px;}
-.workload-table th{text-align:left;font-weight:600;color:var(--muted);padding:8px 10px;border-bottom:1px solid var(--border);font-size:11px;text-transform:uppercase;letter-spacing:.3px;}
+.workload-table th{text-align:left;font-weight:600;color:var(--muted);padding:7px 8px;border-bottom:1px solid var(--border);font-size:10px;text-transform:uppercase;letter-spacing:.3px;}
 .workload-table th.num,.workload-table td.num{text-align:right;}
-.workload-table td{padding:9px 10px;border-bottom:1px solid var(--border);color:var(--text);}
+.workload-table td{padding:7px 8px;border-bottom:1px solid var(--border);color:var(--text);}
 .workload-table tr:last-child td{border-bottom:none;}
 .workload-table tr.workload-total td{font-weight:700;background:var(--surface2);border-top:2px solid var(--border);border-bottom:none;}
 .workload-table .workload-name-cell{display:flex;align-items:center;gap:8px;}
-.workload-table .workload-sp{display:inline-block;padding:2px 8px;border-radius:10px;background:var(--surface2);font-weight:600;min-width:24px;text-align:center;}
+.workload-table .workload-sp{display:inline-block;padding:2px 7px;border-radius:10px;background:var(--surface2);font-weight:600;min-width:22px;text-align:center;font-size:11px;}
+
+/* Per-assignee tickets modal — Jira-style ticket list */
+.assignee-tickets-list{display:flex;flex-direction:column;gap:1px;}
+.assignee-ticket-row{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:6px;font-size:12px;color:var(--text);text-decoration:none;transition:background .12s;}
+.assignee-ticket-row:hover{background:var(--surface2);}
+.assignee-ticket-row + .assignee-ticket-row{border-top:1px solid var(--border);}
+.atr-icon{flex-shrink:0;width:16px;height:16px;border-radius:3px;display:inline-flex;align-items:center;justify-content:center;font-size:10px;color:#fff;font-weight:700;}
+.atr-icon-story{background:#65ba43;}
+.atr-icon-task{background:#4bade8;}
+.atr-icon-bug{background:#e5493a;}
+.atr-icon-spike{background:#ffb400;}
+.atr-icon-incident{background:#ef4444;}
+.atr-icon-design{background:#a855f7;}
+.atr-icon-dependency{background:#64748b;}
+.atr-icon-default{background:#94a3b8;}
+.atr-key{flex-shrink:0;font-family:'SFMono-Regular',Consolas,Menlo,monospace;font-size:11px;color:var(--accent);font-weight:600;width:88px;letter-spacing:-.1px;}
+.atr-key.cancelled{text-decoration:line-through;color:var(--muted2);}
+.atr-title{flex:1;min-width:0;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.atr-status{flex-shrink:0;font-size:9px;font-weight:700;padding:2px 8px;border-radius:3px;text-transform:uppercase;letter-spacing:.4px;}
+.ats-accepted,.ats-done{background:#dcfce7;color:#166534;}
+.ats-in-progress,.ats-test-complete,.ats-development-complete{background:#dbeafe;color:#1d4ed8;}
+.ats-pending-approval{background:#fef3c7;color:#92400e;}
+.ats-blocked{background:#fee2e2;color:#991b1b;}
+.ats-ready-to-start,.ats-to-do{background:#f1f5f9;color:#475569;}
+.ats-cancelled{background:#f1f5f9;color:#94a3b8;}
+.ats-default{background:#f1f5f9;color:#64748b;}
+.atr-sp{flex-shrink:0;display:inline-block;padding:2px 7px;border-radius:10px;background:var(--surface2);font-weight:600;min-width:22px;text-align:center;font-size:10px;color:var(--text);}
+.assignee-tickets-empty{padding:24px;text-align:center;color:var(--muted);font-size:12px;}
+.assignee-tickets-summary{display:flex;align-items:center;gap:10px;padding:0 0 12px;color:var(--muted);font-size:11px;}
+.assignee-tickets-summary strong{color:var(--text);font-weight:700;}
 
 /* Charts row */
 .charts-row{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px;}
@@ -2431,11 +2478,16 @@ function renderBoardHealthGrid(containerId) {
     var sprintLabel = isNone
       ? (d._sprintCount > 1 ? d._sprintCount + ' sprints · no work planned' : 'No work planned')
       : (d._multiSprint ? d._multiSprint : d.sprintName);
-    var showStatus = !d._multiSprint && d.sprintStatus && d.sprintStatus !== 'none';
-    var statusLabel = STATUS_LABELS_CARD[d.sprintStatus] || d.sprintStatus;
     var base = boardBaseUrl(d.board);
     var velocityUrl = base + '/reports/velocity';
     var sourceRows  = (d._multiSprint && Array.isArray(d._sourceRows)) ? d._sourceRows : [d];
+
+    // Status dot — green pulse for active, gray for closed, blue for future.
+    var dotClass = 'bc-sprint-dot';
+    if (d.sprintStatus === 'active') dotClass += ' bc-sprint-dot-active';
+    else if (d.sprintStatus === 'future') dotClass += ' bc-sprint-dot-future';
+    else if (d.sprintStatus === 'closed') dotClass += ' bc-sprint-dot-closed';
+    var dotTitle = STATUS_LABELS_CARD[d.sprintStatus] || d.sprintStatus || '';
 
     // Status chips (Jira-style Todo / In Progress / Done — work-item counts)
     var chips = bucketStatusFromRows(sourceRows);
@@ -2446,74 +2498,63 @@ function renderBoardHealthGrid(containerId) {
         '<div class="bc-chip bc-chip-done"><div class="bc-chip-num">'   + chips.done   + '</div><div class="bc-chip-label">Done</div></div>' +
       '</div>';
 
-    // SP summary line
-    var spHTML = isNone
-      ? '<div class="bc-sp-summary"><span>— SP</span><span class="bc-sep">·</span><span>—</span></div>'
-      : '<div class="bc-sp-summary">' +
-          '<span><strong>' + d.committedSP + '</strong> SP committed</span>' +
-          '<span class="bc-sep">·</span>' +
-          '<span><strong>' + d.doneSP + '</strong> SP done</span>' +
-          '<span class="bc-sep">·</span>' +
-          '<span class="bc-issues-tip" data-tip="Matches Jira’s work-item count (sub-tasks excluded)">' + d.issues + ' items</span>' +
-        '</div>';
-
-    // Type breakdown — small line beneath SP summary (kept; useful at-a-glance)
-    var typesHTML = isNone ? '' : (function(){
-      var typeCounts = {};
-      sourceRows.forEach(function(r){
-        (r.epicBreakdown || []).forEach(function(e){
-          (e.tickets || []).forEach(function(t){
-            var ty = t.issueType || 'Other';
-            typeCounts[ty] = (typeCounts[ty] || 0) + 1;
-          });
-        });
-      });
-      var entries = Object.keys(typeCounts).map(function(k){ return [k, typeCounts[k]]; })
-        .sort(function(a,b){ return b[1]-a[1]; });
-      if (!entries.length) return '';
-      var inner = entries.map(function(p){ return '<span>' + p[1] + ' ' + p[0] + '</span>'; })
-        .join('<span class="sep">·</span>');
-      return '<div class="bc-types-line">' + inner + '</div>';
-    })();
-
-    // Footer: avatars + ⋯ menu + Velocity link
+    // Footer: clickable avatars + ⋯ workload modal + Velocity
     var workload = isNone ? [] : aggregateWorkload(sourceRows);
     var avatars  = workload.slice(0, 5);
     var moreCount = workload.length - avatars.length;
-    var avatarsHTML = avatars.map(function(e){ return initialsAvatar(e.dev); }).join('') +
-      (moreCount > 0 ? '<span class="bc-avatar-more" title="' + moreCount + ' more">+' + moreCount + '</span>' : '');
-    // Use data-* attributes so sprint names with special characters can't
-    // break the onclick handler. A single delegated listener (installed once
-    // outside this function) reads them and opens the modal.
-    var dataAttrs = 'data-board="' + escapeHtml(d.board) + '"' +
-      ' data-sprint-name="' + escapeHtml(d._multiSprint ? '' : (d.sprintName || '')) + '"';
+    var sprintNameAttr = escapeHtml(d._multiSprint ? '' : (d.sprintName || ''));
+    var boardAttr      = escapeHtml(d.board);
+    // Avatar buttons carry the dev name so we can open a per-person ticket modal
+    var avatarsHTML = avatars.map(function(e){
+      return '<button type="button" class="bc-avatar-btn js-assignee-trigger" ' +
+             'data-board="' + boardAttr + '" data-sprint-name="' + sprintNameAttr + '" ' +
+             'data-dev="' + escapeHtml(e.dev) + '" ' +
+             'aria-label="View ' + escapeHtml(e.dev) + '’s tickets" title="' + escapeHtml(e.dev) + ' — ' + e.tickets + ' items, ' + e.sp + ' SP">' +
+               initialsAvatar(e.dev) +
+             '</button>';
+    }).join('') + (moreCount > 0 ? '<span class="bc-avatar-more" title="' + moreCount + ' more">+' + moreCount + '</span>' : '');
+
+    var workloadDataAttrs = 'data-board="' + boardAttr + '" data-sprint-name="' + sprintNameAttr + '"';
     var footerHTML = '<div class="bc-footer">' +
       '<div class="bc-avatars">' + (avatarsHTML || '<span style="color:var(--muted2);font-size:10px;">No assignees</span>') + '</div>' +
       '<div class="bc-footer-actions">' +
         '<a class="bc-report-link" href="' + velocityUrl + '" target="_blank">↗ Velocity</a>' +
-        (isNone ? '' : '<button class="bc-menu-btn js-workload-trigger" ' + dataAttrs + ' aria-label="Workload by assignee" title="Workload by assignee">⋯</button>') +
+        (isNone ? '' : '<button class="bc-menu-btn js-workload-trigger" ' + workloadDataAttrs + ' aria-label="Workload by assignee" title="Workload by assignee">⋯</button>') +
       '</div>' +
     '</div>';
 
     var hasGoal = !isNone && d.sprintGoal && d.sprintGoal !== '—' && !d._multiSprint;
+    var datesStr = (!isNone && d.startDate && !d._multiSprint)
+      ? d.startDate + ' → ' + (d.endDate || '?')
+      : '';
 
     return '<div class="board-card health-' + hc + '">' +
+      // ── Top row: BOARD · sprintName · status dot ──────────────────────
       '<div class="bc-header">' +
-        '<div><div class="bc-name">' + d.board + '</div><div class="bc-em">' + d.em + '</div></div>' +
+        '<div class="bc-title">' +
+          '<span class="bc-name">' + d.board + '</span>' +
+          (isNone || d._multiSprint
+            ? (d._multiSprint ? '<span class="bc-sep">·</span><span class="bc-sprint-name multi">' + sprintLabel + '</span>' : '')
+            : '<span class="bc-sep">·</span><span class="bc-sprint-name">' + sprintLabel + '</span>' +
+              (dotTitle ? '<span class="' + dotClass + '" title="' + dotTitle + '"></span>' : '')) +
+        '</div>' +
         '<div class="bc-pct ' + pctClass + '">' + (isNone ? '—' : pct + '%') + '</div>' +
       '</div>' +
-      '<div class="bc-bar"><div class="bc-bar-fill" style="width:' + (isNone ? 0 : Math.min(pct,100)) + '%;background:' + barColor + '"></div></div>' +
-      chipsHTML +
-      spHTML +
-      typesHTML +
-      (isNone ? '' : buildDriftHTML(d)) +
-      '<div class="bc-info">' +
-        (hasGoal ? '<span class="bc-goal-toggle" onclick="toggleGoal(this)"><span class="bc-goal-arrow">▶</span> Goal</span><span class="bc-sep">·</span>' : '') +
-        '<span class="bc-sprint">' + sprintLabel + '</span>' +
-        ((!isNone && d.startDate && !d._multiSprint) ? '<span class="bc-sep">·</span><span class="bc-dates">' + d.startDate + ' → ' + (d.endDate || '?') + '</span>' : '') +
-        (showStatus ? '<span class="bc-sep">·</span><span class="bc-status ' + d.sprintStatus + '"><span class="bc-status-dot"></span>' + statusLabel + '</span>' : '') +
+      // ── Subline: EM · dates ────────────────────────────────────────────
+      '<div class="bc-subline">' +
+        '<span class="bc-em">' + d.em + '</span>' +
+        (datesStr ? '<span class="bc-sep">·</span><span class="bc-dates">' + datesStr + '</span>' : '') +
       '</div>' +
-      (hasGoal ? '<div class="bc-goal-body">' + d.sprintGoal + '</div>' : '') +
+      // ── Progress bar ──────────────────────────────────────────────────
+      '<div class="bc-bar"><div class="bc-bar-fill" style="width:' + (isNone ? 0 : Math.min(pct,100)) + '%;background:' + barColor + '"></div></div>' +
+      // ── Status chips ──────────────────────────────────────────────────
+      chipsHTML +
+      // ── Goal toggle (only when goal exists) ───────────────────────────
+      (hasGoal
+        ? '<div class="bc-goal-row"><span class="bc-goal-toggle" onclick="toggleGoal(this)"><span class="bc-goal-arrow">▶</span> Sprint Goal</span></div>' +
+          '<div class="bc-goal-body">' + d.sprintGoal + '</div>'
+        : '') +
+      // ── Footer: avatars + actions ─────────────────────────────────────
       footerHTML +
     '</div>';
   }).join('');
@@ -3263,14 +3304,131 @@ function closeWorkloadModal(e) {
   if (modal) modal.classList.remove('open');
 }
 document.addEventListener('keydown', function(e){
-  if (e.key === 'Escape') closeWorkloadModal();
+  if (e.key === 'Escape') { closeWorkloadModal(); closeAssigneeModal(); }
 });
-// Delegated click handler for the ⋯ workload trigger on every board card.
+// Delegated click handler for the ⋯ workload trigger and avatar buttons.
 document.addEventListener('click', function(e){
-  var btn = e.target && e.target.closest && e.target.closest('.js-workload-trigger');
-  if (!btn) return;
-  openWorkloadModal(btn.getAttribute('data-board'), btn.getAttribute('data-sprint-name'));
+  var trg = e.target && e.target.closest;
+  if (!trg) return;
+  var workBtn = e.target.closest('.js-workload-trigger');
+  if (workBtn) { openWorkloadModal(workBtn.getAttribute('data-board'), workBtn.getAttribute('data-sprint-name')); return; }
+  var avatarBtn = e.target.closest('.js-assignee-trigger');
+  if (avatarBtn) {
+    openAssigneeModal(
+      avatarBtn.getAttribute('data-board'),
+      avatarBtn.getAttribute('data-sprint-name'),
+      avatarBtn.getAttribute('data-dev')
+    );
+  }
 });
+
+// ─── Per-assignee tickets modal (Jira-style list with type icons) ───────────
+
+// Map a Jira issue type → CSS modifier class. Unknown types fall back to default.
+function ticketIconClass(issueType) {
+  var t = String(issueType || '').toLowerCase();
+  if (t === 'story')      return 'atr-icon-story';
+  if (t === 'task')       return 'atr-icon-task';
+  if (t === 'bug')        return 'atr-icon-bug';
+  if (t === 'spike')      return 'atr-icon-spike';
+  if (t === 'incident')   return 'atr-icon-incident';
+  if (t === 'design')     return 'atr-icon-design';
+  if (t === 'dependency') return 'atr-icon-dependency';
+  return 'atr-icon-default';
+}
+function ticketIconLetter(issueType) {
+  var c = String(issueType || '?').charAt(0).toUpperCase();
+  return c === 'S' && /spike/i.test(issueType) ? '◆' : c;
+}
+function statusBadgeClass(status) {
+  var s = String(status || '').toLowerCase().replace(/\s+/g, '-');
+  // Aliases — match the same buckets used elsewhere
+  if (s === 'done') s = 'accepted';
+  if (s === 'dev-complete') s = 'development-complete';
+  if (s === 'acceptance')   s = 'accepted';
+  return 'ats-' + s;
+}
+
+// Pull every ticket assigned to `dev` across the rows the card represents.
+// Returns array of {key,title,status,sp,issueType,epic} sorted by SP desc.
+function ticketsForAssignee(rows, dev) {
+  var out = [];
+  rows.forEach(function(d){
+    (d.epicBreakdown || []).forEach(function(epic){
+      (epic.tickets || []).forEach(function(t){
+        if ((t.assignee || 'Unassigned') === dev) {
+          out.push({
+            key:       t.key,
+            title:     t.title || '',
+            status:    t.status || '',
+            sp:        t.sp,
+            issueType: t.issueType || 'Other',
+            epicLabel: epic.label || '',
+          });
+        }
+      });
+    });
+  });
+  out.sort(function(a, b){
+    var sa = a.sp == null ? -1 : a.sp;
+    var sb = b.sp == null ? -1 : b.sp;
+    return sb - sa;
+  });
+  return out;
+}
+
+function renderAssigneeTickets(tickets) {
+  if (!tickets.length) {
+    return '<div class="assignee-tickets-empty">No tickets for this assignee in the selected sprint.</div>';
+  }
+  var totalSP = 0; var doneCount = 0;
+  tickets.forEach(function(t){
+    totalSP += (typeof t.sp === 'number' ? t.sp : 0);
+    if (/^(accepted|done)$/i.test(t.status)) doneCount++;
+  });
+  var summary = '<div class="assignee-tickets-summary">' +
+    '<span><strong>' + tickets.length + '</strong> work item' + (tickets.length === 1 ? '' : 's') + '</span>' +
+    '<span class="bc-sep">·</span>' +
+    '<span><strong>' + (Math.round(totalSP * 10) / 10) + '</strong> SP</span>' +
+    '<span class="bc-sep">·</span>' +
+    '<span><strong>' + doneCount + '</strong> done</span>' +
+  '</div>';
+  var rows = tickets.map(function(t){
+    var statusClass = statusBadgeClass(t.status);
+    var iconCls     = ticketIconClass(t.issueType);
+    var iconLetter  = ticketIconLetter(t.issueType);
+    var keyClass    = 'atr-key' + (/cancel/i.test(t.status) ? ' cancelled' : '');
+    var spStr       = t.sp == null ? '–' : t.sp;
+    var browseUrl   = 'https://moveinc.atlassian.net/browse/' + encodeURIComponent(t.key);
+    return '<a class="assignee-ticket-row" href="' + browseUrl + '" target="_blank" rel="noopener">' +
+      '<span class="atr-icon ' + iconCls + '" title="' + escapeHtml(t.issueType) + '">' + iconLetter + '</span>' +
+      '<span class="' + keyClass + '">' + escapeHtml(t.key) + '</span>' +
+      '<span class="atr-title" title="' + escapeHtml(t.title) + '">' + escapeHtml(t.title) + '</span>' +
+      '<span class="atr-status ' + statusClass + '">' + escapeHtml(t.status || '—') + '</span>' +
+      '<span class="atr-sp" title="Story points">' + spStr + '</span>' +
+    '</a>';
+  }).join('');
+  return summary + '<div class="assignee-tickets-list">' + rows + '</div>';
+}
+
+function openAssigneeModal(board, sprintName, dev) {
+  var rows = findRowsForWorkload(board, sprintName);
+  if (!rows.length) return;
+  var modal = document.getElementById('assignee-tickets-modal');
+  if (!modal) return;
+  var tickets = ticketsForAssignee(rows, dev);
+  document.getElementById('assignee-modal-title').innerHTML =
+    initialsAvatar(dev) + '<span style="margin-left:10px;">' + escapeHtml(dev) + '</span>';
+  document.getElementById('assignee-modal-sprint').textContent =
+    sprintName && !/^\d+ sprints$/.test(sprintName) ? sprintName : (board + ' · ' + rows.length + ' sprints');
+  document.getElementById('assignee-modal-body').innerHTML = renderAssigneeTickets(tickets);
+  modal.classList.add('open');
+}
+function closeAssigneeModal(e) {
+  if (e && e.target && e.target.id !== 'assignee-tickets-modal' && !e.target.classList.contains('modal-close')) return;
+  var modal = document.getElementById('assignee-tickets-modal');
+  if (modal) modal.classList.remove('open');
+}
 
 // Bucket every ticket across one or more sprint rows into the three Jira-style
 // buckets shown in its sprint header (To Do / In Progress / Done).
@@ -3874,7 +4032,19 @@ window.addEventListener('resize', function() { placeFilterBank(); }, { passive: 
       <button class="modal-close" onclick="closeWorkloadModal(event)" aria-label="Close">&times;</button>
     </div>
     <div class="modal-subtitle" id="workload-modal-sprint"></div>
-    <div id="workload-modal-body"></div>
+    <div class="modal-body" id="workload-modal-body"></div>
+  </div>
+</div>
+
+<!-- Per-assignee tickets modal — Jira-style ticket list for one person -->
+<div class="modal-overlay" id="assignee-tickets-modal" onclick="closeAssigneeModal(event)">
+  <div class="modal-card" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h3 id="assignee-modal-title">Tickets</h3>
+      <button class="modal-close" onclick="closeAssigneeModal(event)" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-subtitle" id="assignee-modal-sprint"></div>
+    <div class="modal-body" id="assignee-modal-body"></div>
   </div>
 </div>
 

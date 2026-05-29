@@ -848,28 +848,37 @@ async function processBoard({ board, boardId, em }) {
 
   // ── Scrum board — Agile + Greenhopper sprint report path ─────────────────
 
-  // Active sprint — Greenhopper sprint report is the source of truth Jira's
-  // own Sprint Report UI reads from. Using it for active sprints (not just
-  // closed) means committedSP matches Jira's "Commitment" column exactly,
-  // doneSP matches "Completed", and the work-item count matches the board.
-  // Mid-sprint adds are surfaced as drift fields rather than silently
-  // inflating committedSP.
+  // Active sprint — hybrid source of truth that matches what users see in
+  // Jira's two views simultaneously:
+  //   • SP totals (committedSP / doneSP) come from the Greenhopper sprint
+  //     report, identical to Jira's Sprint Report screen — stable across the
+  //     sprint, mid-sprint adds tracked separately as drift.
+  //   • Work-item count, epicBreakdown, ticketsPerDev come from live JQL on
+  //     `sprint = X` — identical to Jira's "Active sprints" board view and
+  //     the "Workload by assignee" modal. This is what makes Sam Yoo show 4
+  //     items (with mid-sprint adds) instead of the snapshot's 2.
   try {
     const activeSprints = await fetchSprintList(boardId, 'active');
     if (!activeSprints.length) {
       log(`${tag} active... (no active sprint)`);
     } else {
       const sprint          = activeSprints[0];
-      const snap            = await fetchSprintSnapshot(boardId, sprint.id);
-      const metrics         = await fetchSprintReport(boardId, sprint.id);
-      const rawIssues       = await fetchIssuesByKeys(snap.allKeys);
-      const issues          = applySnapshotToIssues(rawIssues, snap);
-      const epicBreakdown   = buildEpicBreakdown(issues);
-      const effortBreakdown = buildEffortBreakdown(issues);
-      const ticketsPerDev   = buildTicketsPerDev(issues);
+      const greenMetrics    = await fetchSprintReport(boardId, sprint.id);
+      // Live JQL — current sprint membership, sub-tasks already excluded by
+      // fetchIssuesBySprintName's `issuetype != Sub-task` clause.
+      const liveIssues      = await fetchIssuesBySprintName(board, sprint.name);
+      const epicBreakdown   = buildEpicBreakdown(liveIssues);
+      const effortBreakdown = buildEffortBreakdown(liveIssues);
+      const ticketsPerDev   = buildTicketsPerDev(liveIssues);
       const goal            = sprint.goal || await fetchSprintGoal(sprint.id);
+      // Compose: SP totals + drift come from Greenhopper, item count comes
+      // from live JQL so the chips/avatars/modal all match Jira's UI.
+      const metrics = {
+        ...greenMetrics,
+        issues: liveIssues.length,
+      };
       patches.push({ kind: 'patchByName', args: [sprint.name, 'active', metrics, epicBreakdown, effortBreakdown, ticketsPerDev, goal, board, em, sprint.startDate, sprint.endDate] });
-      log(`${tag} active... ${String(metrics.issues).padStart(3)} issues — committedSP:${metrics.committedSP}  doneSP:${metrics.doneSP}  (${metrics.spRes}%)`);
+      log(`${tag} active... ${String(metrics.issues).padStart(3)} items live — committedSP:${metrics.committedSP}  doneSP:${metrics.doneSP}  added:${metrics.addedSP}SP/${metrics.addedIssues}  (${metrics.spRes}%)`);
     }
   } catch (err) { log(`${tag} active... FAILED — ${err.message}`); }
 
