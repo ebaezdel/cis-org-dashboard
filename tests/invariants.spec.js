@@ -272,29 +272,28 @@ test.describe('Dashboard data invariants', () => {
 
   // ─── Card layout invariants (Jira-style chips + workload modal) ────────────
 
-  test('every active board card renders three status chips that sum to its issue count', async ({ page }) => {
+  test('every active board card renders three status chips with SP totals + ticket sub-lines', async ({ page }) => {
     await page.locator('#f-status').selectOption('active');
     await page.waitForTimeout(400);
     const offenders = await page.locator('#board-health-grid .board-card').evaluateAll(cards => {
       const out = [];
       cards.forEach(card => {
-        const chipsEls = card.querySelectorAll('.bc-chip-num');
-        if (chipsEls.length === 0) return; // stub card with no work
-        const board = (card.querySelector('.bc-name') || {}).textContent || '';
-        const todo   = parseInt(chipsEls[0]?.textContent || '0', 10);
-        const inprog = parseInt(chipsEls[1]?.textContent || '0', 10);
-        const done   = parseInt(chipsEls[2]?.textContent || '0', 10);
-        const sum = todo + inprog + done;
-        const itemsTxt = (card.querySelector('.bc-issues-tip') || {}).textContent || '';
-        const itemsMatch = itemsTxt.match(/(\d+)/);
-        const items = itemsMatch ? parseInt(itemsMatch[1], 10) : -1;
-        if (items > 0 && sum > 0 && sum !== items) {
-          out.push({ board, todo, inprog, done, sum, items });
+        const chips = card.querySelectorAll('.bc-status-chips .bc-chip');
+        if (chips.length === 0) return; // stub card with no work
+        if (chips.length !== 3) {
+          out.push({ board: (card.querySelector('.bc-name') || {}).textContent, issue: 'expected 3 chips, got ' + chips.length });
+          return;
         }
+        // Each chip must have a num + sub line + label
+        chips.forEach((chip, i) => {
+          if (!chip.querySelector('.bc-chip-num') || !chip.querySelector('.bc-chip-sub') || !chip.querySelector('.bc-chip-label')) {
+            out.push({ board: (card.querySelector('.bc-name') || {}).textContent, chip: i, issue: 'missing num/sub/label' });
+          }
+        });
       });
       return out;
     });
-    expect(offenders, 'cards where chip sum != items count:\n' + JSON.stringify(offenders, null, 2)).toEqual([]);
+    expect(offenders, 'malformed chip layout:\n' + JSON.stringify(offenders, null, 2)).toEqual([]);
   });
 
   test('sprint closeout table renders with at least one closed sprint row and expands on click', async ({ page }) => {

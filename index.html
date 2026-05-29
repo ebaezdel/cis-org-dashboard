@@ -201,6 +201,13 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-s
 .kpi-value.blue{color:var(--blue);}
 .kpi-value.purple{color:var(--purple);}
 .kpi-value.accent{color:var(--accent);}
+/* Jira status-category accents (To Do gray, In Progress blue, Done green) */
+.kpi-value.kpi-todo{color:#42526e;}
+.kpi-value.kpi-inprog{color:#0747a6;}
+.kpi-value.kpi-done{color:#006644;}
+.kpi-card.kpi-todo-card{background:linear-gradient(180deg,#f4f5f7 0%,var(--surface) 60%);}
+.kpi-card.kpi-inprog-card{background:linear-gradient(180deg,#deebff 0%,var(--surface) 60%);}
+.kpi-card.kpi-done-card{background:linear-gradient(180deg,#e3fcef 0%,var(--surface) 60%);}
 .kpi-sub{font-size:11px;color:var(--muted);margin-top:3px;}
 .kpi-bar{height:3px;background:var(--surface2);border-radius:2px;margin-top:8px;overflow:hidden;}
 .kpi-bar-fill{height:100%;border-radius:2px;background:var(--accent);}
@@ -315,7 +322,8 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-s
 .bc-status-chips{display:flex;gap:6px;margin:8px 0 4px;}
 .bc-chip{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:6px 4px;border-radius:6px;min-width:0;}
 .bc-chip-num{font-size:16px;font-weight:700;line-height:1;}
-.bc-chip-label{font-size:8px;font-weight:600;letter-spacing:.4px;text-transform:uppercase;margin-top:3px;}
+.bc-chip-sub{font-size:9px;font-weight:600;color:inherit;opacity:.7;margin-top:2px;}
+.bc-chip-label{font-size:8px;font-weight:600;letter-spacing:.4px;text-transform:uppercase;margin-top:2px;}
 .bc-chip-todo{background:#f1f5f9;color:#475569;}
 .bc-chip-todo .bc-chip-label{color:#64748b;}
 .bc-chip-inprog{background:#dbeafe;color:#1d4ed8;}
@@ -2426,39 +2434,54 @@ function renderSHDKPI() {
   var sprintF = document.getElementById('f-sprint') ? document.getElementById('f-sprint').value : '';
   var qF      = document.getElementById('f-q')      ? document.getElementById('f-q').value      : '';
   var statusF = document.getElementById('f-status') ? document.getElementById('f-status').value  : '';
+  var assigneeF = (document.getElementById('f-assignee') || {}).value || '';
   var hasHistoricFilter = sprintF || qF || statusF !== 'active';
   var source = hasHistoricFilter
     ? FILTERED
     : FILTERED.filter(function(d){ return d.sprintStatus === 'active'; });
   if (!source.length) source = ACTIVE_SPRINTS.filter(function(d){ return d.sprintStatus === 'active'; });
 
-  var totalSP = 0, doneSP = 0, unplannedSP = 0, totalIssues = 0;
+  // Bucket every ticket across the source rows by To Do / In Progress / Done.
+  // For closed sprints we treat Cancelled tickets as part of "done" for the
+  // purposes of the headline SP totals — the work is closed either way.
+  // assigneeF, when present, narrows the buckets to that person only.
+  var IN_PROG_RE = /(in.?progress|test.?complete|dev.?(?:elopment.?)?complete|in.?review|pending.?approval|review|blocked)/i;
+  var DONE_RE    = /^(accepted|done|complete[d]?|resolved|closed|cancelled|canceled|won.?t.?do)$/i;
+  var todoSP = 0, inprogSP = 0, doneSP = 0;
+  var todoCount = 0, inprogCount = 0, doneCount = 0;
   source.forEach(function(d){
-    totalSP    += d.totalSP;
-    doneSP     += d.doneSP;
-    unplannedSP += d.totalSP * d.unplannedPct / 100;
-    totalIssues += d.issues;
+    (d.epicBreakdown || []).forEach(function(epic){
+      (epic.tickets || []).forEach(function(t){
+        if (assigneeF && (t.assignee || 'Unassigned') !== assigneeF) return;
+        var sp = (typeof t.sp === 'number') ? t.sp : 0;
+        var s  = t.status || '';
+        if      (DONE_RE.test(s))    { doneSP   += sp; doneCount++;   }
+        else if (IN_PROG_RE.test(s)) { inprogSP += sp; inprogCount++; }
+        else                         { todoSP   += sp; todoCount++;   }
+      });
+    });
   });
-  var resRate = totalSP > 0 ? Math.round(doneSP / totalSP * 100) : 0;
+  todoSP   = Math.round(todoSP   * 10) / 10;
+  inprogSP = Math.round(inprogSP * 10) / 10;
+  doneSP   = Math.round(doneSP   * 10) / 10;
+  var totalSP = todoSP + inprogSP + doneSP;
+  var pctDone = totalSP > 0 ? Math.round(doneSP / totalSP * 100) : 0;
 
-  var sourceEMs = {};
-  source.forEach(function(d){ sourceEMs[d.em] = true; });
-  var totalBuf = 0;
-  Object.keys(sourceEMs).forEach(function(em){
-    var cfg = CAPACITY[em];
-    if (cfg) totalBuf += cfg.teamSize * cfg.avgSpPerDev * cfg.bufferPct;
-  });
-  var bufRemain = Math.max(0, Math.round(totalBuf - unplannedSP));
-  var scopeLabel = hasHistoricFilter ? 'filtered sprint(s)' : 'active sprint total';
+  var scopeLabel = hasHistoricFilter
+    ? 'across filtered sprint(s)'
+    : 'across active sprints';
+  if (assigneeF) scopeLabel = scopeLabel + ' · ' + assigneeF;
 
   var kpis = [
-    {label:'SP Res%', value: resRate + '%', color: pctColor(resRate), sub:'SP done / committed', pct: resRate},
-    {label:'Committed SP', value: Math.round(totalSP), color:'accent', sub: scopeLabel},
-    {label:'Done SP', value: Math.round(doneSP) + ' SP', color:'', sub: totalIssues + ' issues'},
-    {label:'Unplanned SP', value: Math.round(unplannedSP), color: unplannedSP > 20 ? 'yellow' : '', sub:'injected work',
-     tip:'Work that was added to the sprint after it started — not part of the original commitment. High unplanned SP can signal interrupt-driven work or poor sprint planning.'},
-    {label:'Buffer Remaining', value: bufRemain + ' SP', color: bufRemain > 20 ? 'green' : 'yellow', sub:'of total buffer',
-     tip:'Each team sets aside ~15% of capacity as a buffer for unexpected work. This shows how much of that buffer is still available. Low = the team is absorbing more surprises than planned.'},
+    { label:'% Done', value: pctDone + '%', color: pctColor(pctDone),
+      sub: Math.round(totalSP * 10) / 10 + ' SP committed · ' + scopeLabel,
+      pct: pctDone },
+    { label:'To Do', value: todoSP + ' SP', color: 'kpi-todo', cardClass: 'kpi-todo-card',
+      sub: todoCount + (todoCount === 1 ? ' ticket' : ' tickets') },
+    { label:'In Progress', value: inprogSP + ' SP', color: 'kpi-inprog', cardClass: 'kpi-inprog-card',
+      sub: inprogCount + (inprogCount === 1 ? ' ticket' : ' tickets') },
+    { label:'Done', value: doneSP + ' SP', color: 'kpi-done', cardClass: 'kpi-done-card',
+      sub: doneCount + (doneCount === 1 ? ' ticket' : ' tickets') },
   ];
   renderKPICards('shd-kpi', kpis);
 }
@@ -2470,7 +2493,7 @@ function renderKPICards(containerId, kpis) {
     var labelHtml = k.tip
       ? '<span class="tooltip-wrap">' + k.label + '<span style="margin-left:4px;font-size:9px;color:var(--muted);cursor:help;">ⓘ</span><span class="tip">' + k.tip + '</span></span>'
       : k.label;
-    return '<div class="kpi-card">' +
+    return '<div class="kpi-card' + (k.cardClass ? ' ' + k.cardClass : '') + '">' +
       '<div class="kpi-label">' + labelHtml + '</div>' +
       '<div class="kpi-value' + (k.color ? ' ' + k.color : '') + '">' + k.value + '</div>' +
       '<div class="kpi-sub">' + k.sub + '</div>' +
@@ -2714,9 +2737,21 @@ function renderBoardHealthGrid(containerId) {
     var chips = bucketStatusFromRows(sourceRows);
     var chipsHTML = isNone ? '' :
       '<div class="bc-status-chips">' +
-        '<div class="bc-chip bc-chip-todo"><div class="bc-chip-num">'   + chips.todo   + '</div><div class="bc-chip-label">To Do</div></div>' +
-        '<div class="bc-chip bc-chip-inprog"><div class="bc-chip-num">' + chips.inprog + '</div><div class="bc-chip-label">In Prog</div></div>' +
-        '<div class="bc-chip bc-chip-done"><div class="bc-chip-num">'   + chips.done   + '</div><div class="bc-chip-label">Done</div></div>' +
+        '<div class="bc-chip bc-chip-todo" title="' + chips.todoN + ' ticket' + (chips.todoN === 1 ? '' : 's') + '">' +
+          '<div class="bc-chip-num">'   + chips.todo   + '</div>' +
+          '<div class="bc-chip-sub">' + chips.todoN + (chips.todoN === 1 ? ' tix' : ' tix') + '</div>' +
+          '<div class="bc-chip-label">To Do</div>' +
+        '</div>' +
+        '<div class="bc-chip bc-chip-inprog" title="' + chips.inprogN + ' ticket' + (chips.inprogN === 1 ? '' : 's') + '">' +
+          '<div class="bc-chip-num">' + chips.inprog + '</div>' +
+          '<div class="bc-chip-sub">' + chips.inprogN + ' tix</div>' +
+          '<div class="bc-chip-label">In Prog</div>' +
+        '</div>' +
+        '<div class="bc-chip bc-chip-done" title="' + chips.doneN + ' ticket' + (chips.doneN === 1 ? '' : 's') + '">' +
+          '<div class="bc-chip-num">'   + chips.done   + '</div>' +
+          '<div class="bc-chip-sub">' + chips.doneN + ' tix</div>' +
+          '<div class="bc-chip-label">Done</div>' +
+        '</div>' +
       '</div>';
 
     // Footer: clickable avatars + ⋯ workload modal + Velocity
@@ -4136,21 +4171,30 @@ var WORKLOAD_STATUS_ALIAS = {
   'To Do':        'Ready to Start',
   'Acceptance':   'Accepted',
 };
+// Bucket sprint tickets by status into Todo / In Progress / Done.
+// Returns SP totals per bucket (the headline number on the chip — matches
+// Jira's own chip semantics) plus item counts (used as tooltips/sublines).
 function bucketStatusFromRows(rows) {
   var DONE_KEYS    = { 'Accepted': 1 };
   var IN_PROG_KEYS = { 'In Progress': 1, 'Test Complete': 1, 'Development Complete': 1, 'Pending Approval': 1 };
-  var done = 0, inprog = 0, todo = 0;
+  var done = 0, inprog = 0, todo = 0;       // SP totals
+  var doneN = 0, inprogN = 0, todoN = 0;    // ticket counts
   (rows || []).forEach(function(d){
     (d.epicBreakdown || []).forEach(function(epic){
       (epic.tickets || []).forEach(function(t){
-        var s = WORKLOAD_STATUS_ALIAS[t.status] || t.status || 'Unknown';
-        if      (DONE_KEYS[s])    done++;
-        else if (IN_PROG_KEYS[s]) inprog++;
-        else                      todo++;
+        var s  = WORKLOAD_STATUS_ALIAS[t.status] || t.status || 'Unknown';
+        var sp = (typeof t.sp === 'number') ? t.sp : 0;
+        if      (DONE_KEYS[s])    { done   += sp; doneN++;   }
+        else if (IN_PROG_KEYS[s]) { inprog += sp; inprogN++; }
+        else                      { todo   += sp; todoN++;   }
       });
     });
   });
-  return { todo: todo, inprog: inprog, done: done };
+  var r = function(n){ return Math.round(n * 10) / 10; };
+  return {
+    todo:   r(todo),   inprog:   r(inprog),   done:   r(done),
+    todoN:  todoN,     inprogN:  inprogN,     doneN:  doneN,
+  };
 }
 
 function toggleStatusGroup(grpId, hdrRow) {
