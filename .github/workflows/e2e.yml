@@ -1,15 +1,17 @@
 name: E2E Tests
 
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+  # Run AFTER Pages deployment completes — avoids testing stale content
+  workflow_run:
+    workflows: ["pages-build-deployment"]
+    types: [completed]
+  workflow_dispatch:
 
 jobs:
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
 
     steps:
       - uses: actions/checkout@v4
@@ -25,10 +27,13 @@ jobs:
       - name: Install Playwright browsers
         run: npx playwright install chromium --with-deps
 
+      - name: Wait for Pages CDN propagation
+        run: sleep 20
+
       - name: Run E2E tests
         run: npm run test:ci
         env:
-          BASE_URL: https://ebaezdel.github.io/cis-org-dashboard/
+          BASE_URL: https://ebaezdel.github.io
 
       - name: Upload test report on failure
         if: failure()

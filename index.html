@@ -77,6 +77,7 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-s
 .sync-badge{font-size:9px;font-weight:700;letter-spacing:.5px;padding:2px 7px;border-radius:4px;text-transform:uppercase;}
 .sync-scheduled{background:#164e63;color:#67e8f9;}
 .sync-manual{background:#78350f;color:#fde68a;}
+.sync-push{background:#3b0764;color:#d8b4fe;}
 .sync-next{color:#94a3b8;font-size:11px;}
 .sync-dot{width:7px;height:7px;border-radius:50%;background:#22c55e;display:inline-block;margin-right:6px;}
 .header-actions{margin-left:auto;display:flex;gap:8px;}
@@ -498,7 +499,7 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-s
 .closeout-bar .seg-carryover{background:#d97706;}
 .closeout-bar .seg-cancelled{background:#94a3b8;}
 .closeout-bar .seg-inprogress{background:#2563eb;}
-.closeout-bar .seg-todo{background:#cbd5e1;}
+.closeout-bar .seg-todo{background:#94a3b8;}
 .closeout-summary .stat.blue strong{color:#2563eb;}
 /* Mini bucket pills under the distribution bar — make SP + items
    instantly readable at a glance with Jira-colored chips. */
@@ -511,7 +512,7 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-s
 .closeout-bucket-pill .bp-label{font-size:8px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;opacity:.7;margin-left:2px;}
 .closeout-bucket-pill.bp-done{background:#dcfce7;color:#15803d;}
 .closeout-bucket-pill.bp-inprog{background:#dbeafe;color:#1d4ed8;}
-.closeout-bucket-pill.bp-todo{background:#f1f5f9;color:#475569;}
+.closeout-bucket-pill.bp-todo{background:#e2e8f0;color:#334155;}
 .closeout-bucket-pill.bp-carryover{background:#fef3c7;color:#92400e;}
 .closeout-bucket-pill.bp-cancelled{background:#f1f5f9;color:#64748b;}
 .closeout-bucket-pill.bp-empty{opacity:.45;}
@@ -809,7 +810,7 @@ tr.ticket-col-hdr.hidden{display:none;}
     <span class="sp-pill">8SP</span>
     <span class="sp-pill">13SP</span>
   </div>
-  <span class="sp-desc">Fibonacci · 85% capacity · 2-week sprints</span>
+  <span class="sp-desc">Fibonacci · 85% capacity · 2-week sprints · 10 SP per person per sprint</span>
 </div>
 
 <!-- Header -->
@@ -919,10 +920,10 @@ tr.ticket-col-hdr.hidden{display:none;}
   <div class="section-heading" id="board-health-heading">Board Health &mdash; Active Sprint</div>
   <div class="board-grid" id="board-health-grid"></div>
   <div class="closeout-section-head">
-    <div class="section-heading" id="sprint-closeout-heading">Sprint Closeout — Carryover Analysis</div>
+    <div class="section-heading" id="sprint-closeout-heading">Active Sprints — Live Snapshot</div>
     <div class="closeout-toggle" role="tablist">
-      <button type="button" class="closeout-pill" data-mode="active" role="tab" aria-selected="false" onclick="setCloseoutMode('active')">Active Sprints</button>
-      <button type="button" class="closeout-pill active" data-mode="closed" role="tab" aria-selected="true" onclick="setCloseoutMode('closed')">Sprint Closeout</button>
+      <button type="button" class="closeout-pill active" data-mode="active" role="tab" aria-selected="true" onclick="setCloseoutMode('active')">Active Sprints</button>
+      <button type="button" class="closeout-pill" data-mode="closed" role="tab" aria-selected="false" onclick="setCloseoutMode('closed')">Sprint Closeout</button>
     </div>
   </div>
   <div id="sprint-closeout"></div>
@@ -1864,6 +1865,8 @@ function initBanner() {
   });
   var triggerLabel = trigger === 'manual'
     ? '<span class="sync-badge sync-manual">MANUAL</span>'
+    : trigger === 'push'
+    ? '<span class="sync-badge sync-push">UI UPDATE</span>'
     : '<span class="sync-badge sync-scheduled">SCHEDULED</span>';
   el.innerHTML = '<span class="sync-dot"></span>Jira synced ' + formatted +
     ' &nbsp;' + triggerLabel +
@@ -1892,10 +1895,11 @@ function startCountdown() {
     if (!label) return;
     var diffMs = nextSyncTime() - new Date();
     if (diffMs <= 0) { label.textContent = 'syncing…'; return; }
-    var diffSec = Math.floor(diffMs / 1000);
-    label.textContent = diffSec <= 60
-      ? 'next sync in ' + diffSec + 's'
-      : 'next sync in ' + Math.floor(diffSec / 60) + 'm';
+    var diffMin = Math.floor(diffMs / 60000);
+    if (diffMin < 1) { label.textContent = 'next sync in <1m'; }
+    else if (diffMin <= 60) { label.textContent = 'next sync in ' + diffMin + 'm'; }
+    else if (diffMin <= 1440) { label.textContent = 'next sync in ' + Math.floor(diffMin / 60) + 'h ' + (diffMin % 60) + 'm'; }
+    else { label.textContent = 'next sync Mon 12:00 AM UTC'; }
   }
 
   tick();
@@ -3632,7 +3636,7 @@ function renderCloseoutTickets(tickets, bucket) {
 // Toggle state for the unified closeout/active widget. Persists for the
 // duration of the page visit; default is 'closed' (carryover analysis is
 // the more analytical view; active is the in-flight snapshot).
-var CLOSEOUT_MODE = 'closed';
+var CLOSEOUT_MODE = 'active';
 
 function setCloseoutMode(mode) {
   if (mode !== 'active' && mode !== 'closed') return;

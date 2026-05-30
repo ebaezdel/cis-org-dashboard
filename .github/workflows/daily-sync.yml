@@ -4,6 +4,11 @@ on:
   schedule:
     - cron: '*/15 * * * 1-5'  # every 15 min, 24hrs, Mon-Fri
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'index.html'
+      - 'scripts/sync.js'
 
 jobs:
   sync:
