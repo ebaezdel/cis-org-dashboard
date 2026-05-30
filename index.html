@@ -457,6 +457,9 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-s
 .closeout-wrap{background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:20px;}
 .closeout-empty{padding:24px;text-align:center;color:var(--muted);font-size:12px;}
 .closeout-summary{display:flex;align-items:flex-end;gap:14px;padding:12px 18px;background:var(--surface2);border-bottom:1px solid var(--border);font-size:11px;color:var(--muted);flex-wrap:wrap;}
+.closeout-toggle-all{margin-left:auto;display:flex;gap:4px;align-items:center;}
+.closeout-toggle-all button{background:none;border:1px solid var(--border);border-radius:5px;padding:3px 8px;font-size:10px;font-weight:600;color:var(--muted);cursor:pointer;font-family:inherit;}
+.closeout-toggle-all button:hover{background:var(--surface);color:var(--text);border-color:var(--accent);}
 .closeout-summary .stat{display:flex;align-items:baseline;gap:5px;}
 .closeout-summary .stat strong{color:var(--text);font-size:14px;font-weight:700;}
 .closeout-summary .stat.green strong{color:#16a34a;}
@@ -3773,6 +3776,10 @@ function renderClosedTable(el, rows, assigneeFilter) {
       summaryKStatHTML('k-done',      tot.completedSP, tot.completed, 'Done') +
       summaryKPctHTML('Avg Sprint Resolution', avgCompletion) +
       summaryKPctHTML('Carryover Rate',        carryoverPct) +
+      '<div class="closeout-toggle-all">' +
+        '<button onclick="toggleAllCloseout(this.closest(\'.closeout-wrap\'),true)">Expand all</button>' +
+        '<button onclick="toggleAllCloseout(this.closest(\'.closeout-wrap\'),false)">Collapse all</button>' +
+      '</div>' +
     '</div>' +
     '<table class="closeout-table">' +
       '<thead><tr>' +
@@ -3870,6 +3877,10 @@ function renderActiveTable(el, rows, assigneeFilter) {
       summaryKStatHTML('k-inprog', tot.inprogSP, tot.inprog, 'In Progress') +
       summaryKStatHTML('k-done',   tot.doneSP,   tot.done,   'Done') +
       summaryKPctHTML('Avg Sprint Resolution', pctDone) +
+      '<div class="closeout-toggle-all">' +
+        '<button onclick="toggleAllCloseout(this.closest(\'.closeout-wrap\'),true)">Expand all</button>' +
+        '<button onclick="toggleAllCloseout(this.closest(\'.closeout-wrap\'),false)">Collapse all</button>' +
+      '</div>' +
     '</div>' +
     '<table class="closeout-table">' +
       '<thead><tr>' +
@@ -3937,10 +3948,27 @@ function renderActiveTable(el, rows, assigneeFilter) {
 function toggleCloseoutDetail(rowId) {
   var summary = document.getElementById(rowId);
   if (!summary) return;
-  var detail = document.querySelector('tr.closeout-detail-row[data-parent="' + rowId + '"]');
+  var detail = summary.closest('table') ?
+    summary.closest('table').querySelector('tr.closeout-detail-row[data-parent="' + rowId + '"]') :
+    document.querySelector('tr.closeout-detail-row[data-parent="' + rowId + '"]');
   if (!detail) return;
   var open = detail.classList.toggle('hidden') === false;
   summary.classList.toggle('open', open);
+}
+function toggleAllCloseout(container, expand) {
+  var wrap = typeof container === 'string' ? document.getElementById(container) : container;
+  if (!wrap) return;
+  wrap.querySelectorAll('.closeout-summary-row').forEach(function(row){
+    var detail = wrap.querySelector('tr.closeout-detail-row[data-parent="' + row.id + '"]');
+    if (!detail) return;
+    if (expand) {
+      row.classList.add('open');
+      detail.classList.remove('hidden');
+    } else {
+      row.classList.remove('open');
+      detail.classList.add('hidden');
+    }
+  });
 }
 
 function toggleGoal(el) {
@@ -4564,17 +4592,6 @@ function renderResolutionModalContent() {
     renderClosedTable(el, source, assigneeFilter);
   }
   body.innerHTML = el.innerHTML;
-  // Auto-expand rows only for Active Sprints (the user wants to see tickets
-  // at a glance). Sprint Closeout stays collapsed — it has many sprints.
-  if (RESOLUTION_MODAL_MODE === 'active') {
-    body.querySelectorAll('.closeout-summary-row').forEach(function(row){
-      if (!row.classList.contains('open')) {
-        row.classList.add('open');
-        var detail = body.querySelector('tr.closeout-detail-row[data-parent="' + row.id + '"]');
-        if (detail) detail.classList.remove('hidden');
-      }
-    });
-  }
 }
 function closeResolutionModal(e) {
   if (e && e.target && e.target.id !== 'resolution-modal' && !e.target.classList.contains('modal-close')) return;
