@@ -479,9 +479,12 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-s
 .closeout-summary .kstat.k-done{background:#dcfce7;color:#15803d;}
 .closeout-summary .kstat.k-carryover{background:#fef3c7;color:#92400e;}
 .closeout-summary .kstat.k-cancelled{background:#f1f5f9;color:#64748b;}
-.closeout-summary .kstat-pct{display:flex;flex-direction:column;gap:3px;padding:6px 12px;border-left:1px solid var(--border);}
-.closeout-summary .kstat-pct-val{font-size:20px;font-weight:700;line-height:1;color:var(--text);}
-.closeout-summary .kstat-pct-label{font-size:9px;font-weight:600;letter-spacing:.3px;color:var(--muted);text-transform:uppercase;}
+.closeout-summary .kstat-pct{display:flex;flex-direction:column;gap:3px;padding:8px 14px;border-left:1px solid var(--border);border-radius:8px;}
+.closeout-summary .kstat-pct-val{font-size:20px;font-weight:700;line-height:1;}
+.closeout-summary .kstat-pct-label{font-size:9px;font-weight:600;letter-spacing:.3px;text-transform:uppercase;}
+.closeout-summary .kstat-pct-green{background:#dcfce7;}.closeout-summary .kstat-pct-green .kstat-pct-val{color:#166534;}.closeout-summary .kstat-pct-green .kstat-pct-label{color:#15803d;}
+.closeout-summary .kstat-pct-yellow{background:#fef9c3;}.closeout-summary .kstat-pct-yellow .kstat-pct-val{color:#854d0e;}.closeout-summary .kstat-pct-yellow .kstat-pct-label{color:#a16207;}
+.closeout-summary .kstat-pct-red{background:#fee2e2;}.closeout-summary .kstat-pct-red .kstat-pct-val{color:#991b1b;}.closeout-summary .kstat-pct-red .kstat-pct-label{color:#b91c1c;}
 .closeout-table{width:100%;border-collapse:collapse;font-size:12px;}
 .closeout-table th{text-align:left;padding:10px 12px;font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;background:var(--surface2);border-bottom:1px solid var(--border);white-space:nowrap;}
 .closeout-table th.num,.closeout-table td.num{text-align:right;}
@@ -3571,7 +3574,8 @@ function summaryKStatHTML(cls, sp, n, label) {
   '</div>';
 }
 function summaryKPctHTML(label, pct) {
-  return '<div class="kstat-pct">' +
+  var band = pct >= 70 ? 'kstat-pct-green' : pct >= 40 ? 'kstat-pct-yellow' : 'kstat-pct-red';
+  return '<div class="kstat-pct ' + band + '">' +
     '<div class="kstat-pct-val">' + pct + '%</div>' +
     '<div class="kstat-pct-label">' + label + '</div>' +
   '</div>';
