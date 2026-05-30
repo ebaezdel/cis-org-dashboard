@@ -388,7 +388,7 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-s
 .workload-table .workload-sp{display:inline-flex;align-items:center;justify-content:center;padding:3px 10px;border-radius:10px;background:#deebff;color:#0747a6;font-weight:700;min-width:28px;font-size:12px;}
 #workload-modal .modal-card{max-width:500px;}
 #workload-modal .modal-body{padding:0 16px 16px;}
-.wl-grid{display:grid;grid-template-columns:1fr 80px 90px;font-size:13px;}
+.wl-grid{display:grid;grid-template-columns:1fr 80px 70px 90px;font-size:13px;}
 .wl-row{display:contents;}
 .wl-row:hover .wl-cell{background:var(--surface2);}
 .wl-cell{padding:9px 10px;border-bottom:1px solid var(--border);display:flex;align-items:center;}
@@ -2550,7 +2550,7 @@ function renderSHDKPI() {
   var kpis = [
     { label:'Sprint Resolution', value: pctDone + '%', color: pctColor(pctDone),
       sub: doneSP + ' / ' + (Math.round(totalSP * 10) / 10) + ' SP · ' + totalCount + (totalCount === 1 ? ' item' : ' items') + ' · ' + scopeLabel,
-      pct: pctDone },
+      pct: pctDone, action: 'resolution' },
     { label:'To Do', value: todoSP + ' SP', color: 'kpi-todo', cardClass: 'kpi-todo-card',
       sub: todoCount + (todoCount === 1 ? ' item' : ' items'), bucket: 'todo' },
     { label:'In Progress', value: inprogSP + ' SP', color: 'kpi-inprog', cardClass: 'kpi-inprog-card',
@@ -2568,13 +2568,16 @@ function renderKPICards(containerId, kpis) {
     var labelHtml = k.tip
       ? '<span class="tooltip-wrap">' + k.label + '<span style="margin-left:4px;font-size:9px;color:var(--muted);cursor:help;">ⓘ</span><span class="tip">' + k.tip + '</span></span>'
       : k.label;
-    var clickAttrs = k.bucket
+    var isClickable = k.bucket || k.action;
+    var clickAttrs = isClickable
       ? ' class="kpi-card kpi-clickable' + (k.cardClass ? ' ' + k.cardClass : '') + '"' +
-        ' role="button" tabindex="0" data-bucket="' + escapeHtml(k.bucket) + '"' +
-        ' aria-label="' + escapeHtml(k.label) + ' — open ticket list"'
+        ' role="button" tabindex="0"' +
+        (k.bucket ? ' data-bucket="' + escapeHtml(k.bucket) + '"' : '') +
+        (k.action ? ' data-action="' + escapeHtml(k.action) + '"' : '') +
+        ' aria-label="' + escapeHtml(k.label) + ' — click to view details"'
       : ' class="kpi-card' + (k.cardClass ? ' ' + k.cardClass : '') + '"';
     return '<div' + clickAttrs + '>' +
-      '<div class="kpi-label">' + labelHtml + (k.bucket ? '<span class="kpi-open-hint">›</span>' : '') + '</div>' +
+      '<div class="kpi-label">' + labelHtml + (isClickable ? '<span class="kpi-open-hint">›</span>' : '') + '</div>' +
       '<div class="kpi-value' + (k.color ? ' ' + k.color : '') + '">' + k.value + '</div>' +
       '<div class="kpi-sub">' + k.sub + '</div>' +
       (k.pct != null ? '<div class="kpi-bar"><div class="kpi-bar-fill" style="width:' + Math.min(k.pct, 100) + '%"></div></div>' : '') +
@@ -4134,6 +4137,7 @@ function renderWorkloadTable(rows) {
     return '<div class="wl-row">' +
       '<div class="wl-cell wl-name"><div class="workload-name-cell">' + initialsAvatar(e.dev, e.avatarUrl || lookupAvatarUrl(e.dev)) + '<span>' + escapeHtml(e.dev) + '</span></div></div>' +
       '<div class="wl-cell wl-num">' + e.tickets + '</div>' +
+      '<div class="wl-cell wl-num" style="color:var(--muted2)">0</div>' +
       '<div class="wl-cell wl-num"><span class="workload-sp">' + e.sp + '</span></div>' +
     '</div>';
   }).join('');
@@ -4141,12 +4145,14 @@ function renderWorkloadTable(rows) {
     '<div class="wl-row wl-header">' +
       '<div class="wl-cell wl-name">Assignee</div>' +
       '<div class="wl-cell wl-num">Work items</div>' +
+      '<div class="wl-cell wl-num">Subtasks</div>' +
       '<div class="wl-cell wl-num">Story points</div>' +
     '</div>' +
     bodyRows +
     '<div class="wl-row wl-total">' +
       '<div class="wl-cell wl-name">Total</div>' +
       '<div class="wl-cell wl-num">' + totalItems + '</div>' +
+      '<div class="wl-cell wl-num">0</div>' +
       '<div class="wl-cell wl-num"><span class="workload-sp">' + (Math.round(totalSP * 10) / 10) + '</span></div>' +
     '</div>' +
   '</div>';
@@ -4173,7 +4179,7 @@ function closeWorkloadModal(e) {
   if (modal) modal.classList.remove('open');
 }
 document.addEventListener('keydown', function(e){
-  if (e.key === 'Escape') { closeWorkloadModal(); closeAssigneeModal(); closeBucketModal(); }
+  if (e.key === 'Escape') { closeWorkloadModal(); closeAssigneeModal(); closeBucketModal(); closeResolutionModal(); }
 });
 // Delegated click handler for the ⋯ workload trigger, avatar buttons,
 // status chips, and KPI cards. A single listener avoids re-binding after
@@ -4208,6 +4214,11 @@ document.addEventListener('click', function(e){
   var kpi = e.target.closest('.kpi-clickable');
   if (kpi && kpi.getAttribute('data-bucket')) {
     openBucketModal({ scope: 'global', bucket: kpi.getAttribute('data-bucket') });
+    return;
+  }
+  // Sprint Resolution KPI — open the active sprints table in a modal
+  if (kpi && kpi.getAttribute('data-action') === 'resolution') {
+    openResolutionModal();
     return;
   }
 });
@@ -4502,6 +4513,36 @@ function closeBucketModal(e) {
   if (e && e.target && e.target.id !== 'bucket-tickets-modal' && !e.target.classList.contains('modal-close')) return;
   var modal = document.getElementById('bucket-tickets-modal');
   if (modal) modal.classList.remove('open');
+}
+
+function openResolutionModal() {
+  var modal = document.getElementById('resolution-modal');
+  var body  = document.getElementById('resolution-modal-body');
+  if (!modal || !body) return;
+  // Render the same active-sprints table that appears in the closeout section
+  var assigneeFilter = getFilterState().assignee;
+  var source = (FILTERED.length ? FILTERED : ALL_SPRINTS_FY26)
+    .filter(function(d){ return d.sprintStatus === 'active' && d.totalSP > 0; });
+  if (assigneeFilter) {
+    source = source.filter(function(d){
+      return (d.epicBreakdown || []).some(function(epic){
+        return (epic.tickets || []).some(function(t){ return assigneeMatches(t.assignee, assigneeFilter); });
+      });
+    });
+  }
+  source.sort(function(a, b){
+    if (b.fy !== a.fy) return (b.fy || '').localeCompare(a.fy || '');
+    if (b.sprint !== a.sprint) return b.sprint - a.sprint;
+    return (a.board || '').localeCompare(b.board || '');
+  });
+  var el = document.createElement('div');
+  renderActiveTable(el, source, assigneeFilter);
+  body.innerHTML = el.innerHTML;
+  modal.classList.add('open');
+}
+function closeResolutionModal(e) {
+  if (e && e.target && e.target.id !== 'resolution-modal' && !e.target.classList.contains('modal-close')) return;
+  document.getElementById('resolution-modal').classList.remove('open');
 }
 
 // Bucket sprint tickets into the three Jira "status categories" shown in
@@ -5129,6 +5170,17 @@ window.addEventListener('resize', function() { placeFilterBank(); }, { passive: 
     </div>
     <div class="modal-subtitle" id="bucket-modal-subtitle"></div>
     <div class="modal-body" id="bucket-modal-body"></div>
+  </div>
+</div>
+
+<!-- Sprint Resolution modal — full active sprints table -->
+<div class="modal-overlay" id="resolution-modal" onclick="closeResolutionModal(event)">
+  <div class="modal-card" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h3>Sprint Resolution — Active Sprints</h3>
+      <button class="modal-close" onclick="closeResolutionModal(event)" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-body" id="resolution-modal-body" style="padding:0;"></div>
   </div>
 </div>
 
