@@ -48,41 +48,37 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-s
 
 /* SP Banner */
 .sp-banner{
-  background:var(--surface);border-bottom:1px solid var(--border);
+  background:#1e293b;border-bottom:1px solid #334155;
   padding:6px 24px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;font-size:11px;
 }
-.sp-banner strong{color:var(--accent);font-size:11px;font-weight:600;white-space:nowrap;}
+.sp-banner strong{color:#93c5fd;font-size:11px;font-weight:600;white-space:nowrap;}
 .sp-scale{display:flex;gap:5px;align-items:center;flex-wrap:wrap;}
 .sp-pill{
-  background:var(--accent-bg);border:1px solid var(--accent-border);
-  color:var(--accent-text);border-radius:4px;padding:1px 7px;font-size:10px;font-weight:600;white-space:nowrap;
+  background:#334155;border:1px solid #475569;
+  color:#e2e8f0;border-radius:4px;padding:1px 7px;font-size:10px;font-weight:600;white-space:nowrap;
 }
-.sp-desc{color:var(--muted);font-size:11px;}
-.buffer-bar-banner{display:flex;align-items:center;gap:8px;margin-left:auto;}
-.buffer-bar-banner-label{font-size:11px;color:var(--muted);white-space:nowrap;}
-.bbb-track{width:100px;height:6px;background:var(--surface2);border-radius:3px;overflow:hidden;border:1px solid var(--border);}
-.bbb-fill{height:100%;border-radius:3px;transition:width .5s;}
-.bbb-pct{font-size:11px;font-weight:600;min-width:32px;color:var(--text2);}
+.sp-desc{color:#94a3b8;font-size:11px;}
 
 /* Header */
 .sticky-shell{position:sticky;top:0;z-index:200;}
 .header{
-  background:var(--surface);border-bottom:1px solid var(--border);
+  background:#1e293b;border-bottom:1px solid #334155;
   padding:0 24px;height:52px;display:flex;align-items:center;gap:16px;
-  box-shadow:0 1px 3px rgba(0,0,0,.06);
+  box-shadow:0 2px 8px rgba(0,0,0,.15);
 }
 .header-logo{display:flex;align-items:center;gap:10px;}
 .header-dot{
   width:30px;height:30px;background:var(--accent);border-radius:8px;
   display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#fff;
 }
-.header-title{font-size:14px;font-weight:700;color:var(--text);white-space:nowrap;}
-.header-sep{width:1px;height:20px;background:var(--border);}
-.header-meta{font-size:11px;color:var(--muted);display:flex;align-items:center;gap:6px;}
+.header-title{font-size:14px;font-weight:700;color:#f1f5f9;white-space:nowrap;}
+.header-sep{width:1px;height:20px;background:#475569;}
+.header-meta{font-size:11px;color:#94a3b8;display:flex;align-items:center;gap:6px;}
 .sync-badge{font-size:9px;font-weight:700;letter-spacing:.5px;padding:2px 7px;border-radius:4px;text-transform:uppercase;}
-.sync-scheduled{background:#e0f2fe;color:#0369a1;}
-.sync-manual{background:#fef3c7;color:#92400e;}
-.sync-next{color:var(--muted);font-size:11px;}
+.sync-scheduled{background:#164e63;color:#67e8f9;}
+.sync-manual{background:#78350f;color:#fde68a;}
+.sync-next{color:#94a3b8;font-size:11px;}
+.sync-dot{width:7px;height:7px;border-radius:50%;background:#22c55e;display:inline-block;margin-right:6px;}
 .header-actions{margin-left:auto;display:flex;gap:8px;}
 .btn{
   display:inline-flex;align-items:center;gap:5px;
@@ -813,11 +809,6 @@ tr.ticket-col-hdr.hidden{display:none;}
     <span class="sp-pill">13SP</span>
   </div>
   <span class="sp-desc">Fibonacci · 85% capacity · 2-week sprints</span>
-  <div class="buffer-bar-banner">
-    <span class="buffer-bar-banner-label">Buffer consumed:</span>
-    <div class="bbb-track"><div class="bbb-fill" id="banner-buffer-fill"></div></div>
-    <span class="bbb-pct" id="banner-buffer-pct"></span>
-  </div>
 </div>
 
 <!-- Header -->
@@ -1873,7 +1864,7 @@ function initBanner() {
   var triggerLabel = trigger === 'manual'
     ? '<span class="sync-badge sync-manual">MANUAL</span>'
     : '<span class="sync-badge sync-scheduled">SCHEDULED</span>';
-  el.innerHTML = 'Jira synced ' + formatted +
+  el.innerHTML = '<span class="sync-dot"></span>Jira synced ' + formatted +
     ' &nbsp;' + triggerLabel +
     ' &nbsp;<span id="next-sync-label" class="sync-next"></span>';
   startCountdown();
