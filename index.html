@@ -4564,14 +4564,17 @@ function renderResolutionModalContent() {
     renderClosedTable(el, source, assigneeFilter);
   }
   body.innerHTML = el.innerHTML;
-  // Auto-expand all sprint rows so tickets are immediately visible
-  body.querySelectorAll('.closeout-summary-row').forEach(function(row){
-    if (!row.classList.contains('open')) {
-      row.classList.add('open');
-      var detail = body.querySelector('tr.closeout-detail-row[data-parent="' + row.id + '"]');
-      if (detail) detail.classList.remove('hidden');
-    }
-  });
+  // Auto-expand rows only for Active Sprints (the user wants to see tickets
+  // at a glance). Sprint Closeout stays collapsed — it has many sprints.
+  if (RESOLUTION_MODAL_MODE === 'active') {
+    body.querySelectorAll('.closeout-summary-row').forEach(function(row){
+      if (!row.classList.contains('open')) {
+        row.classList.add('open');
+        var detail = body.querySelector('tr.closeout-detail-row[data-parent="' + row.id + '"]');
+        if (detail) detail.classList.remove('hidden');
+      }
+    });
+  }
 }
 function closeResolutionModal(e) {
   if (e && e.target && e.target.id !== 'resolution-modal' && !e.target.classList.contains('modal-close')) return;
