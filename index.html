@@ -2528,7 +2528,20 @@ function renderSHDKPI() {
   inprogSP = Math.round(inprogSP * 10) / 10;
   doneSP   = Math.round(doneSP   * 10) / 10;
   var totalSP = todoSP + inprogSP + doneSP;
-  var pctDone = totalSP > 0 ? Math.round(doneSP / totalSP * 100) : 0;
+
+  // Sprint Resolution uses Greenhopper's spRes (matches Jira's Sprint Report)
+  // weighted by committedSP so larger sprints carry proportional weight.
+  var weightedSum = 0, weightTotal = 0;
+  var ghDoneSP = 0, ghCommittedSP = 0;
+  source.forEach(function(d) {
+    if (typeof d.spRes === 'number' && d.committedSP > 0) {
+      weightedSum   += d.spRes * d.committedSP;
+      weightTotal   += d.committedSP;
+      ghDoneSP      += (d.doneSP || 0);
+      ghCommittedSP += d.committedSP;
+    }
+  });
+  var pctDone = weightTotal > 0 ? Math.round(weightedSum / weightTotal) : 0;
 
   var scopeLabel = hasHistoricFilter
     ? 'across filtered sprint(s)'
@@ -2538,7 +2551,7 @@ function renderSHDKPI() {
   var totalCount = todoCount + inprogCount + doneCount;
   var kpis = [
     { label:'Sprint Resolution', value: pctDone + '%', color: pctColor(pctDone),
-      sub: doneSP + ' / ' + (Math.round(totalSP * 10) / 10) + ' SP · ' + totalCount + (totalCount === 1 ? ' item' : ' items') + ' · ' + scopeLabel,
+      sub: Math.round(ghDoneSP * 10) / 10 + ' / ' + Math.round(ghCommittedSP * 10) / 10 + ' SP · ' + totalCount + (totalCount === 1 ? ' item' : ' items') + ' · ' + scopeLabel,
       pct: pctDone, action: 'resolution' },
     { label:'To Do', value: todoSP + ' SP', color: 'kpi-todo', cardClass: 'kpi-todo-card',
       sub: todoCount + (todoCount === 1 ? ' item' : ' items'), bucket: 'todo' },
@@ -3736,7 +3749,10 @@ function renderClosedTable(el, rows, assigneeFilter) {
     return { row: d, c: c };
   });
   var totSP = tot.completedSP + tot.carryoverSP;
-  var avgCompletion = totSP > 0 ? Math.round(tot.completedSP / totSP * 100) : 0;
+  // Avg Sprint Resolution — weighted average of Greenhopper spRes
+  var wSum = 0, wTot = 0;
+  classified.forEach(function(entry){ var r = entry.row; if (r.spRes > 0 && r.committedSP > 0) { wSum += r.spRes * r.committedSP; wTot += r.committedSP; }});
+  var avgCompletion = wTot > 0 ? Math.round(wSum / wTot) : 0;
   var carryoverPct  = totSP > 0 ? Math.round(tot.carryoverSP / totSP * 100) : 0;
   var assigneeBadge = assigneeFilter ? '<span class="closeout-assignee-badge">' + initialsAvatar(assigneeFilter, lookupAvatarUrl(assigneeFilter)) + escapeHtml(assigneeFilter) + '</span>' : '';
 
@@ -3768,7 +3784,7 @@ function renderClosedTable(el, rows, assigneeFilter) {
     var c = entry.c;
     var totalCount = c.completed.count + c.carryover.count;
     var totalSP    = c.completed.sp    + c.carryover.sp;
-    var pctC = totalSP > 0 ? Math.round(c.completed.sp / totalSP * 100) : 0;
+    var pctC = d.spRes || 0;
     var pctK = totalSP > 0 ? Math.max(0, 100 - pctC)                     : 0;
     var rid = 'co-' + idx;
     var isOpen = !!assigneeFilter;
@@ -3829,7 +3845,10 @@ function renderActiveTable(el, rows, assigneeFilter) {
     return { row: d, c: c };
   });
   var totSP = tot.doneSP + tot.inprogSP + tot.todoSP;
-  var pctDone = totSP > 0 ? Math.round(tot.doneSP / totSP * 100) : 0;
+  // Avg Sprint Resolution — weighted average of Greenhopper spRes
+  var wSum2 = 0, wTot2 = 0;
+  classified.forEach(function(entry){ var r = entry.row; if (r.spRes > 0 && r.committedSP > 0) { wSum2 += r.spRes * r.committedSP; wTot2 += r.committedSP; }});
+  var pctDone = wTot2 > 0 ? Math.round(wSum2 / wTot2) : 0;
   var assigneeBadge = assigneeFilter ? '<span class="closeout-assignee-badge">' + initialsAvatar(assigneeFilter, lookupAvatarUrl(assigneeFilter)) + escapeHtml(assigneeFilter) + '</span>' : '';
 
   var html = '<div class="closeout-wrap">' +
@@ -3860,7 +3879,7 @@ function renderActiveTable(el, rows, assigneeFilter) {
     var c = entry.c;
     var totalCount = c.done.count + c.inprog.count + c.todo.count;
     var totalSP    = c.done.sp    + c.inprog.sp    + c.todo.sp;
-    var pctD = totalSP > 0 ? Math.round(c.done.sp   / totalSP * 100) : 0;
+    var pctD = d.spRes || 0;
     var pctI = totalSP > 0 ? Math.round(c.inprog.sp / totalSP * 100) : 0;
     var pctT = totalSP > 0 ? Math.max(0, 100 - pctD - pctI)            : 0;
     var rid = 'co-active-' + idx;
