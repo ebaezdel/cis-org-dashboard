@@ -3512,29 +3512,21 @@ function classifyCloseout(row) {
   var out = {
     completed: { count: 0, sp: 0, tickets: [] },
     carryover: { count: 0, sp: 0, tickets: [] },
-    cancelled: { count: 0, sp: 0, tickets: [] },
   };
   (row.epicBreakdown || []).forEach(function(epic){
     (epic.tickets || []).forEach(function(t){
-      // Cancelled gets its own bucket (separate from completed/Done) so the
-      // closed-sprint distribution surfaces abandoned scope distinctly.
-      // Everything else routes through statusCategory() so a "Done" status
-      // is always Done and an "In Progress" / "Pending Approval" is always
-      // carryover — no regex drift across classifiers.
-      var bucket;
-      if      (isCancelledStatus(t.status))            bucket = 'cancelled';
-      else if (statusCategory(t.status) === 'done')    bucket = 'completed';
-      else                                             bucket = 'carryover';
+      // Cancelled routes to 'completed' (work is closed) so Sprint Resolution
+      // % matches the KPI and Jira's own status category. Cancelled tickets
+      // retain their strikethrough styling via isCancelledStatus() in the renderer.
+      var bucket = statusCategory(t.status) === 'done' ? 'completed' : 'carryover';
       var sp = (typeof t.sp === 'number') ? t.sp : 0;
       out[bucket].count += 1;
       out[bucket].sp    += sp;
       out[bucket].tickets.push(Object.assign({}, t, { epicLabel: epic.label || '' }));
     });
   });
-  // Round SP totals
-  ['completed','carryover','cancelled'].forEach(function(b){
+  ['completed','carryover'].forEach(function(b){
     out[b].sp = Math.round(out[b].sp * 10) / 10;
-    // Sort tickets by SP desc for the drill-down view
     out[b].tickets.sort(function(a, c){
       var sa = a.sp == null ? -1 : a.sp;
       var sc = c.sp == null ? -1 : c.sp;
@@ -3728,26 +3720,22 @@ function renderSprintCloseout(elId) {
 }
 
 function renderClosedTable(el, rows, assigneeFilter) {
-  // Roll up totals across the visible rows for the summary strip
-  var tot = { completed: 0, carryover: 0, cancelled: 0, completedSP: 0, carryoverSP: 0, cancelledSP: 0 };
+  var tot = { completed: 0, carryover: 0, completedSP: 0, carryoverSP: 0 };
   var classified = rows.map(function(d){
     var c = classifyCloseout(d);
     if (assigneeFilter) {
       c = {
         completed: filterBucketByAssignee(c.completed, assigneeFilter),
         carryover: filterBucketByAssignee(c.carryover, assigneeFilter),
-        cancelled: filterBucketByAssignee(c.cancelled, assigneeFilter),
       };
     }
     tot.completed   += c.completed.count;
     tot.carryover   += c.carryover.count;
-    tot.cancelled   += c.cancelled.count;
     tot.completedSP += c.completed.sp;
     tot.carryoverSP += c.carryover.sp;
-    tot.cancelledSP += c.cancelled.sp;
     return { row: d, c: c };
   });
-  var totSP = tot.completedSP + tot.carryoverSP + tot.cancelledSP;
+  var totSP = tot.completedSP + tot.carryoverSP;
   var avgCompletion = totSP > 0 ? Math.round(tot.completedSP / totSP * 100) : 0;
   var carryoverPct  = totSP > 0 ? Math.round(tot.carryoverSP / totSP * 100) : 0;
   var assigneeBadge = assigneeFilter ? '<span class="closeout-assignee-badge">' + initialsAvatar(assigneeFilter, lookupAvatarUrl(assigneeFilter)) + escapeHtml(assigneeFilter) + '</span>' : '';
@@ -3757,7 +3745,6 @@ function renderClosedTable(el, rows, assigneeFilter) {
       assigneeBadge +
       '<div class="stat"><strong>' + rows.length + '</strong><span>sprints</span></div>' +
       summaryKStatHTML('k-carryover', tot.carryoverSP, tot.carryover, 'Carryover') +
-      summaryKStatHTML('k-cancelled', tot.cancelledSP, tot.cancelled, 'Cancelled') +
       summaryKStatHTML('k-done',      tot.completedSP, tot.completed, 'Done') +
       summaryKPctHTML('Avg Sprint Resolution', avgCompletion) +
       summaryKPctHTML('Carryover Rate',        carryoverPct) +
@@ -3779,14 +3766,11 @@ function renderClosedTable(el, rows, assigneeFilter) {
   classified.forEach(function(entry, idx){
     var d = entry.row;
     var c = entry.c;
-    var totalCount = c.completed.count + c.carryover.count + c.cancelled.count;
-    var totalSP    = c.completed.sp    + c.carryover.sp    + c.cancelled.sp;
+    var totalCount = c.completed.count + c.carryover.count;
+    var totalSP    = c.completed.sp    + c.carryover.sp;
     var pctC = totalSP > 0 ? Math.round(c.completed.sp / totalSP * 100) : 0;
-    var pctK = totalSP > 0 ? Math.round(c.carryover.sp / totalSP * 100) : 0;
-    var pctX = totalSP > 0 ? Math.max(0, 100 - pctC - pctK)              : 0;
+    var pctK = totalSP > 0 ? Math.max(0, 100 - pctC)                     : 0;
     var rid = 'co-' + idx;
-    // Auto-expand when an assignee filter is on so the user lands directly
-    // on their tickets without an extra click.
     var isOpen = !!assigneeFilter;
     html += '<tr class="closeout-summary-row' + (isOpen ? ' open' : '') + '" id="' + rid + '" onclick="toggleCloseoutDetail(\'' + rid + '\')">' +
       '<td><span class="closeout-arrow">▶</span></td>' +
@@ -3795,14 +3779,12 @@ function renderClosedTable(el, rows, assigneeFilter) {
       '</td>' +
       '<td class="num">' + totalCount + '</td>' +
       '<td class="num">' + (Math.round(totalSP * 10) / 10) + '</td>' +
-      '<td><div class="closeout-bar" title="Carryover ' + pctK + '% · Cancelled ' + pctX + '% · Completed ' + pctC + '%">' +
+      '<td><div class="closeout-bar" title="Carryover ' + pctK + '% · Done ' + pctC + '%">' +
         '<span class="seg-carryover" style="width:' + pctK + '%"></span>' +
-        '<span class="seg-cancelled" style="width:' + pctX + '%"></span>' +
         '<span class="seg-completed" style="width:' + pctC + '%"></span>' +
       '</div>' +
       bucketPillsHTML([
         { cls:'bp-carryover', sp:c.carryover.sp, n:c.carryover.count, label:'Carryover' },
-        { cls:'bp-cancelled', sp:c.cancelled.sp, n:c.cancelled.count, label:'Cancelled' },
         { cls:'bp-done',      sp:c.completed.sp, n:c.completed.count, label:'Done' },
       ]) +
       '</td>' +
@@ -3814,10 +3796,6 @@ function renderClosedTable(el, rows, assigneeFilter) {
         (c.carryover.count ? '<div class="closeout-detail-section">' +
           '<div class="closeout-detail-section-title">Carryover <span class="count">' + c.carryover.count + ' items · ' + c.carryover.sp + ' SP</span></div>' +
           renderCloseoutTickets(c.carryover.tickets, 'carryover') +
-        '</div>' : '') +
-        (c.cancelled.count ? '<div class="closeout-detail-section">' +
-          '<div class="closeout-detail-section-title">Cancelled <span class="count">' + c.cancelled.count + ' items · ' + c.cancelled.sp + ' SP</span></div>' +
-          renderCloseoutTickets(c.cancelled.tickets, 'cancelled') +
         '</div>' : '') +
         (c.completed.count ? '<div class="closeout-detail-section">' +
           '<div class="closeout-detail-section-title">Completed <span class="count">' + c.completed.count + ' items · ' + c.completed.sp + ' SP</span></div>' +
