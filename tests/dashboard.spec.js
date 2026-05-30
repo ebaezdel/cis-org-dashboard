@@ -151,7 +151,7 @@ test.describe('CIS Org Health Dashboard', () => {
       return el && el.innerText.trim().length > 0;
     }, { timeout: 10_000 });
     const text = await page.locator('#data-banner').innerText();
-    expect(text).toMatch(/Last updated|next sync/i);
+    expect(text).toMatch(/Jira synced|next sync/i);
   });
 
 });

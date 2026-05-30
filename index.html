@@ -78,7 +78,11 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-s
 }
 .header-title{font-size:14px;font-weight:700;color:var(--text);white-space:nowrap;}
 .header-sep{width:1px;height:20px;background:var(--border);}
-.header-meta{font-size:11px;color:var(--muted);}
+.header-meta{font-size:11px;color:var(--muted);display:flex;align-items:center;gap:6px;}
+.sync-badge{font-size:9px;font-weight:700;letter-spacing:.5px;padding:2px 7px;border-radius:4px;text-transform:uppercase;}
+.sync-scheduled{background:#e0f2fe;color:#0369a1;}
+.sync-manual{background:#fef3c7;color:#92400e;}
+.sync-next{color:var(--muted);font-size:11px;}
 .header-actions{margin-left:auto;display:flex;gap:8px;}
 .btn{
   display:inline-flex;align-items:center;gap:5px;
@@ -1860,18 +1864,18 @@ function initBanner() {
   var trigger = el.getAttribute('data-trigger') || 'schedule';
   var dt = new Date(raw);
   var formatted = dt.toLocaleDateString('en-US', {
-    month: 'long', day: 'numeric', year: 'numeric',
+    month: 'numeric', day: 'numeric', year: 'numeric',
     timeZone: 'America/Chicago'
   }) + ', ' + dt.toLocaleTimeString('en-US', {
-    hour: 'numeric', minute: '2-digit', hour12: true,
+    hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true,
     timeZone: 'America/Chicago'
-  }) + ' CST';
+  });
   var triggerLabel = trigger === 'manual'
-    ? '<span title="Triggered manually via GitHub Actions" style="color:var(--accent);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;">&#9654; manual</span>'
-    : '<span title="Triggered automatically by scheduled cron" style="color:var(--muted);font-size:10px;">&#128337; scheduled</span>';
-  el.innerHTML = 'Source: RDC-OS Jira MCP &nbsp;&middot;&nbsp; Last updated: ' + formatted +
-    ' &nbsp;&middot;&nbsp; ' + triggerLabel +
-    ' &nbsp;&middot;&nbsp; <span id="next-sync-label" style="color:var(--muted);"></span>';
+    ? '<span class="sync-badge sync-manual">MANUAL</span>'
+    : '<span class="sync-badge sync-scheduled">SCHEDULED</span>';
+  el.innerHTML = 'Jira synced ' + formatted +
+    ' &nbsp;' + triggerLabel +
+    ' &nbsp;<span id="next-sync-label" class="sync-next"></span>';
   startCountdown();
 }
 
