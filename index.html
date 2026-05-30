@@ -4517,14 +4517,34 @@ function closeBucketModal(e) {
   if (modal) modal.classList.remove('open');
 }
 
+var RESOLUTION_MODAL_MODE = 'active';
 function openResolutionModal() {
-  var modal = document.getElementById('resolution-modal');
-  var body  = document.getElementById('resolution-modal-body');
-  if (!modal || !body) return;
-  // Render the same active-sprints table that appears in the closeout section
+  RESOLUTION_MODAL_MODE = 'active';
+  renderResolutionModalContent();
+  document.getElementById('resolution-modal').classList.add('open');
+  // Sync tab pills
+  syncResolutionTabs();
+}
+function switchResolutionTab(mode) {
+  RESOLUTION_MODAL_MODE = mode;
+  renderResolutionModalContent();
+  syncResolutionTabs();
+}
+function syncResolutionTabs() {
+  var pills = document.querySelectorAll('#resolution-modal .closeout-pill');
+  pills.forEach(function(p){ p.classList.toggle('active', p.getAttribute('data-mode') === RESOLUTION_MODAL_MODE); });
+  var title = document.getElementById('resolution-modal-title');
+  if (title) title.textContent = RESOLUTION_MODAL_MODE === 'active'
+    ? 'Sprint Resolution — Active Sprints'
+    : 'Sprint Resolution — Sprint Closeout';
+}
+function renderResolutionModalContent() {
+  var body = document.getElementById('resolution-modal-body');
+  if (!body) return;
   var assigneeFilter = getFilterState().assignee;
+  var targetStatus = RESOLUTION_MODAL_MODE === 'active' ? 'active' : 'closed';
   var source = (FILTERED.length ? FILTERED : ALL_SPRINTS_FY26)
-    .filter(function(d){ return d.sprintStatus === 'active' && d.totalSP > 0; });
+    .filter(function(d){ return d.sprintStatus === targetStatus && d.totalSP > 0; });
   if (assigneeFilter) {
     source = source.filter(function(d){
       return (d.epicBreakdown || []).some(function(epic){
@@ -4538,9 +4558,20 @@ function openResolutionModal() {
     return (a.board || '').localeCompare(b.board || '');
   });
   var el = document.createElement('div');
-  renderActiveTable(el, source, assigneeFilter);
+  if (RESOLUTION_MODAL_MODE === 'active') {
+    renderActiveTable(el, source, assigneeFilter);
+  } else {
+    renderClosedTable(el, source, assigneeFilter);
+  }
   body.innerHTML = el.innerHTML;
-  modal.classList.add('open');
+  // Auto-expand all sprint rows so tickets are immediately visible
+  body.querySelectorAll('.closeout-summary-row').forEach(function(row){
+    if (!row.classList.contains('open')) {
+      row.classList.add('open');
+      var detail = body.querySelector('tr.closeout-detail-row[data-parent="' + row.id + '"]');
+      if (detail) detail.classList.remove('hidden');
+    }
+  });
 }
 function closeResolutionModal(e) {
   if (e && e.target && e.target.id !== 'resolution-modal' && !e.target.classList.contains('modal-close')) return;
@@ -5175,11 +5206,15 @@ window.addEventListener('resize', function() { placeFilterBank(); }, { passive: 
   </div>
 </div>
 
-<!-- Sprint Resolution modal — full active sprints table -->
+<!-- Sprint Resolution modal — full active/closed sprints table -->
 <div class="modal-overlay" id="resolution-modal" onclick="closeResolutionModal(event)">
   <div class="modal-card" onclick="event.stopPropagation()">
     <div class="modal-header">
-      <h3>Sprint Resolution — Active Sprints</h3>
+      <h3 id="resolution-modal-title">Sprint Resolution — Active Sprints</h3>
+      <div class="closeout-toggle" role="tablist" style="margin-left:auto;margin-right:16px;">
+        <button type="button" class="closeout-pill active" data-mode="active" role="tab" onclick="switchResolutionTab('active')">Active Sprints</button>
+        <button type="button" class="closeout-pill" data-mode="closed" role="tab" onclick="switchResolutionTab('closed')">Sprint Closeout</button>
+      </div>
       <button class="modal-close" onclick="closeResolutionModal(event)" aria-label="Close">&times;</button>
     </div>
     <div class="modal-body" id="resolution-modal-body" style="padding:0;"></div>
