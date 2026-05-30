@@ -1963,26 +1963,7 @@ function computeBacklogSprints() {
 
 // ─── Banner buffer ────────────────────────────────────────────────────────────
 function computeBannerBuffer() {
-  var totalBuffer = 0;
-  var usedBuffer = 0;
-  Object.keys(CAPACITY).forEach(function(em) {
-    var cfg = CAPACITY[em];
-    var raw = cfg.teamSize * cfg.avgSpPerDev;
-    var buf = raw * cfg.bufferPct;
-    totalBuffer += buf;
-    var active = ACTIVE_SPRINTS.filter(function(d){ return d.em === em && d.sprintStatus === 'active'; });
-    active.forEach(function(d){
-      usedBuffer += d.totalSP * (d.unplannedPct / 100);
-    });
-  });
-  var pct = totalBuffer > 0 ? Math.min(Math.round(usedBuffer / totalBuffer * 100), 100) : 0;
-  var fill = document.getElementById('banner-buffer-fill');
-  var pctEl = document.getElementById('banner-buffer-pct');
-  var color = pct < 50 ? 'var(--green)' : pct < 80 ? 'var(--yellow)' : 'var(--red)';
-  fill.style.width = pct + '%';
-  fill.style.background = color;
-  pctEl.textContent = pct + '%';
-  pctEl.style.color = color;
+  // Buffer bar was removed from the UI — this is now a no-op.
 }
 
 // ─── Bidirectional faceted filters ─────────────────────────────────────────
