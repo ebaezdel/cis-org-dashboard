@@ -322,10 +322,10 @@ test.describe('Dashboard data invariants', () => {
     await trigger.click();
     const modal = page.locator('#workload-modal.open');
     await expect(modal).toBeVisible({ timeout: 3_000 });
-    const dataRows = modal.locator('table.workload-table tbody tr:not(.workload-total)');
+    const dataRows = modal.locator('.wl-grid .wl-row:not(.wl-header):not(.wl-total)');
     expect(await dataRows.count()).toBeGreaterThan(0);
-    // Total row exists and is bold
-    await expect(modal.locator('tr.workload-total')).toBeVisible();
+    // Total row exists
+    await expect(modal.locator('.wl-total')).toBeVisible();
     // Close via ESC
     await page.keyboard.press('Escape');
     await expect(page.locator('#workload-modal.open')).toHaveCount(0);

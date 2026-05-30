@@ -375,17 +375,29 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-s
 .modal-close{background:none;border:none;font-size:20px;line-height:1;cursor:pointer;color:var(--muted);padding:4px 10px;border-radius:6px;font-family:inherit;}
 .modal-close:hover{background:var(--surface2);color:var(--text);}
 .modal-subtitle{font-size:11px;color:var(--muted);font-family:'SFMono-Regular',Consolas,Menlo,monospace;letter-spacing:-.1px;padding:0 24px 14px;flex-shrink:0;}
-.modal-body{padding:0 24px 20px;overflow-y:auto;flex:1;min-height:0;}
-.workload-table{width:100%;border-collapse:collapse;font-size:13px;table-layout:auto;}
-.workload-table th{text-align:left;font-weight:600;color:var(--muted);padding:12px 14px;border-bottom:1px solid var(--border);font-size:10px;text-transform:uppercase;letter-spacing:.4px;background:var(--surface);position:sticky;top:0;z-index:1;}
+.modal-body{padding:0 24px 20px;overflow-y:auto;flex:1;min-height:0;min-width:0;}
+.workload-table{width:100%;border-collapse:collapse;font-size:13px;}
+.workload-table th{text-align:left;font-weight:600;color:var(--muted);padding:8px 10px;border-bottom:1px solid var(--border);font-size:10px;text-transform:uppercase;letter-spacing:.3px;}
 .workload-table th.num,.workload-table td.num{text-align:right;white-space:nowrap;}
-.workload-table td{padding:12px 14px;border-bottom:1px solid var(--border);color:var(--text);}
+.workload-table td{padding:8px 10px;border-bottom:1px solid var(--border);color:var(--text);}
 .workload-table tr:last-child td{border-bottom:none;}
 .workload-table tbody tr:hover td{background:var(--surface2);}
 .workload-table tr.workload-total td{font-weight:700;background:var(--surface2);border-top:2px solid var(--border);border-bottom:none;}
-.workload-table tr.workload-total:hover td{background:var(--surface2);}
-.workload-table .workload-name-cell{display:flex;align-items:center;gap:9px;}
-.workload-table .workload-sp{display:inline-block;padding:2px 9px;border-radius:11px;background:var(--surface2);font-weight:600;min-width:26px;text-align:center;font-size:12px;}
+.workload-table .workload-name-cell{display:flex;align-items:center;gap:8px;min-width:0;}
+.workload-table .workload-name-cell span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.workload-table .workload-sp{display:inline-flex;align-items:center;justify-content:center;padding:3px 10px;border-radius:10px;background:#deebff;color:#0747a6;font-weight:700;min-width:28px;font-size:12px;}
+#workload-modal .modal-card{max-width:500px;}
+#workload-modal .modal-body{padding:0 16px 16px;}
+.wl-grid{display:grid;grid-template-columns:1fr 80px 90px;font-size:13px;}
+.wl-row{display:contents;}
+.wl-row:hover .wl-cell{background:var(--surface2);}
+.wl-cell{padding:9px 10px;border-bottom:1px solid var(--border);display:flex;align-items:center;}
+.wl-cell.wl-num{justify-content:flex-end;}
+.wl-header .wl-cell{font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.3px;padding:8px 10px;}
+.wl-total .wl-cell{font-weight:700;background:var(--surface2);border-top:2px solid var(--border);border-bottom:none;}
+.wl-grid .workload-name-cell{display:flex;align-items:center;gap:8px;min-width:0;overflow:hidden;}
+.wl-grid .workload-name-cell span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.wl-grid .workload-sp{display:inline-flex;align-items:center;justify-content:center;padding:3px 10px;border-radius:10px;background:#deebff;color:#0747a6;font-weight:700;min-width:28px;font-size:12px;}
 
 /* Per-assignee tickets modal — Jira-style ticket list */
 .assignee-tickets-list{display:flex;flex-direction:column;gap:1px;}
@@ -4119,28 +4131,25 @@ function renderWorkloadTable(rows) {
   var bodyRows = workload.map(function(e){
     totalItems += e.tickets;
     totalSP    += e.sp;
-    return '<tr>' +
-      '<td><div class="workload-name-cell">' + initialsAvatar(e.dev, e.avatarUrl || lookupAvatarUrl(e.dev)) + '<span>' + escapeHtml(e.dev) + '</span></div></td>' +
-      '<td class="num">' + e.tickets + '</td>' +
-      '<td class="num" style="color:var(--muted2)">0</td>' +
-      '<td class="num"><span class="workload-sp">' + e.sp + '</span></td>' +
-    '</tr>';
+    return '<div class="wl-row">' +
+      '<div class="wl-cell wl-name"><div class="workload-name-cell">' + initialsAvatar(e.dev, e.avatarUrl || lookupAvatarUrl(e.dev)) + '<span>' + escapeHtml(e.dev) + '</span></div></div>' +
+      '<div class="wl-cell wl-num">' + e.tickets + '</div>' +
+      '<div class="wl-cell wl-num"><span class="workload-sp">' + e.sp + '</span></div>' +
+    '</div>';
   }).join('');
-  return '<table class="workload-table">' +
-    '<thead><tr>' +
-      '<th>Assignee</th>' +
-      '<th class="num">Work items</th>' +
-      '<th class="num">Subtasks</th>' +
-      '<th class="num">Story points</th>' +
-    '</tr></thead>' +
-    '<tbody>' + bodyRows +
-      '<tr class="workload-total">' +
-        '<td>Total</td>' +
-        '<td class="num">' + totalItems + '</td>' +
-        '<td class="num">0</td>' +
-        '<td class="num">' + (Math.round(totalSP * 10) / 10) + '</td>' +
-      '</tr>' +
-    '</tbody></table>';
+  return '<div class="wl-grid">' +
+    '<div class="wl-row wl-header">' +
+      '<div class="wl-cell wl-name">Assignee</div>' +
+      '<div class="wl-cell wl-num">Work items</div>' +
+      '<div class="wl-cell wl-num">Story points</div>' +
+    '</div>' +
+    bodyRows +
+    '<div class="wl-row wl-total">' +
+      '<div class="wl-cell wl-name">Total</div>' +
+      '<div class="wl-cell wl-num">' + totalItems + '</div>' +
+      '<div class="wl-cell wl-num"><span class="workload-sp">' + (Math.round(totalSP * 10) / 10) + '</span></div>' +
+    '</div>' +
+  '</div>';
 }
 
 function openWorkloadModal(board, sprintName) {
