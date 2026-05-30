@@ -84,12 +84,7 @@ async function fetchIssues(board, sprintClause) {
     'summary', 'status', 'assignee', 'issuetype', 'labels',
     'customfield_10034', 'customfield_10016', 'customfield_10020', 'parent', 'issuelinks',
   ].join(',');
-  // Exclude Sub-tasks so dashboard work-item counts match Jira's board view —
-  // Jira folds sub-tasks under their parent Story in the sprint UI, but the
-  // raw `sprint = X` JQL returns them as siblings. Their SP (when present)
-  // also inflates totalSP. Sub-task detail still surfaces through the parent
-  // story's epicBreakdown entry.
-  const jql = encodeURIComponent(`project = ${board} AND sprint in ${sprintClause} AND issuetype != Sub-task ORDER BY created ASC`);
+  const jql = encodeURIComponent(`project = ${board} AND sprint in ${sprintClause} ORDER BY created ASC`);
 
   let issues = [];
   let nextPageToken;
@@ -112,7 +107,7 @@ async function fetchIssuesBySprintName(board, sprintName) {
     'summary', 'status', 'assignee', 'issuetype', 'labels',
     'customfield_10034', 'customfield_10016', 'customfield_10020', 'parent', 'issuelinks',
   ].join(',');
-  const jql = encodeURIComponent(`project = ${board} AND sprint = "${sprintName}" AND issuetype != Sub-task ORDER BY created ASC`);
+  const jql = encodeURIComponent(`project = ${board} AND sprint = "${sprintName}" ORDER BY created ASC`);
 
   let issues = [];
   let nextPageToken;
@@ -141,7 +136,7 @@ async function fetchIssuesByKeys(keys) {
   // chunk to avoid 414 URI Too Long
   for (let i = 0; i < keys.length; i += 80) {
     const slice = keys.slice(i, i + 80);
-    const jql = encodeURIComponent(`key in (${slice.join(',')}) AND issuetype != Sub-task`);
+    const jql = encodeURIComponent(`key in (${slice.join(',')})`);
     let nextPageToken;
     while (true) {
       const qs = nextPageToken
@@ -310,11 +305,9 @@ async function fetchSprintReport(boardId, sprintId) {
   const pendingSP   = r1(c.issuesNotCompletedEstimateSum?.value        ?? 0);
   const totalSP     = r1(doneSP + pendingSP);
   // Issue count excludes mid-sprint adds AND sub-tasks (matches Jira's board
-  // view denominator). Sub-tasks are folded under their parent in the Jira
-  // UI; counting them as separate work items would inflate by ~25-50%.
-  const isSubtask = (i) => /sub-?task/i.test(i.typeName || '');
-  const countMain = (arr) => (arr || []).filter(i => !added.has(i.key) && !isSubtask(i)).length;
-  const issues = countMain(completedIssues) + countMain(notCompleted) + countMain(punted) + countMain(completedOutside);
+  // Count all issues in the sprint (including sub-tasks).
+  const countAll = (arr) => (arr || []).filter(i => !added.has(i.key)).length;
+  const issues = countAll(completedIssues) + countAll(notCompleted) + countAll(punted) + countAll(completedOutside);
 
   // Drift surface — what the dashboard hides vs. shows so we can render
   // an explanatory note on the card when these are non-zero.
@@ -323,14 +316,15 @@ async function fetchSprintReport(boardId, sprintId) {
     const v = i.estimateStatistic?.statFieldValue?.value;
     return s + (typeof v === 'number' ? v : 0);
   }, 0);
+  const isSubtask = (i) => /sub-?task/i.test(i.typeName || '');
   const addedIssues = (
     [completedIssues, notCompleted, punted, completedOutside].reduce((n, arr) =>
-      n + (arr || []).filter(i => added.has(i.key) && !isSubtask(i)).length, 0)
+      n + (arr || []).filter(i => added.has(i.key)).length, 0)
   );
   const addedSP = r1(sumAdded(completedIssues) + sumAdded(notCompleted) + sumAdded(punted) + sumAdded(completedOutside));
   const subtaskCount = (
     [completedIssues, notCompleted, punted, completedOutside].reduce((n, arr) =>
-      n + (arr || []).filter(i => !added.has(i.key) && isSubtask(i)).length, 0)
+      n + (arr || []).filter(i => isSubtask(i)).length, 0)
   );
 
   const spRes       = pct(doneSP, committedSP);
@@ -737,14 +731,7 @@ function dedupeSprintRows(html) {
           if (updated !== line) requartered++;
           line = updated;
         }
-        // Strip any sub-task tickets left over from rows the current sync
-        // won't touch (legacy future/closed rows). Active and re-fetched
-        // sprints come back clean from the JQL filter; this catches the rest.
-        const stripResult = stripSubtasksFromLine(line);
-        if (stripResult.stripped > 0) {
-          subtasksStripped += stripResult.stripped;
-          line = stripResult.line;
-        }
+        // Sub-tasks are now included in all queries — no stripping needed.
       }
     }
     out.push(line);

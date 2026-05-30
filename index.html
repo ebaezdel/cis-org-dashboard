@@ -397,8 +397,9 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-s
 .wl-cell.wl-num{justify-content:flex-end;}
 .wl-header .wl-cell{font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.3px;padding:8px 10px;}
 .wl-total .wl-cell{font-weight:700;background:var(--surface2);border-top:2px solid var(--border);border-bottom:none;}
-.wl-grid .workload-name-cell{display:flex;align-items:center;gap:8px;min-width:0;overflow:hidden;}
-.wl-grid .workload-name-cell span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.wl-grid .workload-name-cell{display:flex;align-items:center;gap:8px;min-width:0;}
+.wl-grid .workload-name-cell .bc-avatar{flex-shrink:0;}
+.wl-grid .workload-name-cell span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;}
 .wl-grid .workload-sp{display:inline-flex;align-items:center;justify-content:center;padding:3px 10px;border-radius:10px;background:#deebff;color:#0747a6;font-weight:700;min-width:28px;font-size:12px;}
 
 /* Per-assignee tickets modal — Jira-style ticket list */
@@ -2726,7 +2727,7 @@ function renderBoardHealthGrid(containerId) {
       parts.push('+' + addedSP + ' SP added mid-sprint (' + addedIssues + ' ' + (addedIssues === 1 ? 'issue' : 'issues') + ')');
     }
     if (subtasks > 0) {
-      parts.push(subtasks + ' sub-task' + (subtasks === 1 ? '' : 's') + ' hidden from count');
+      parts.push(subtasks + ' sub-task' + (subtasks === 1 ? '' : 's') + ' included');
     }
     if (!parts.length) return '';
     return '<div class="bc-drift">' + parts.join(' · ') + '</div>';
